@@ -3,6 +3,7 @@ package combinator
 type RDB interface {
 	Execute(stmts string) (data []byte, err error)
 	Start() error
+	Type() string
 }
 
 type KV interface {

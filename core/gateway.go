@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 
+	"jabberwocky238/combinator/core/rdb"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,11 +19,8 @@ func NewGateway(endpoint string) *Gateway {
 	processor := NewProcessor()
 
 	// 默认添加一个 id为 "1" 的 sqlite RDB 用于测试
-	rdb1, err := NewSqliteRDB(":memory:")
-	if err != nil {
-		panic(err)
-	}
-	processor.AddRDB("1", rdb1)
+	processor.AddRDB("1", rdb.NewSqliteRDB(":memory:"))
+	processor.AddRDB("2", rdb.NewPsqlRDB("localhost", 5432, "combine1", "combine1", "combine1db"))
 
 	return &Gateway{
 		endpoint:  endpoint,
@@ -68,6 +67,11 @@ func (g *Gateway) rdbHandler(c *gin.Context) {
 }
 
 func (g *Gateway) Start() error {
+	err := g.processor.Start()
+	if err != nil {
+		return err
+	}
+
 	r := gin.Default()
 	g.ginServer = r
 

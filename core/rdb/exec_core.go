@@ -1,4 +1,4 @@
-package combinator
+package rdb
 
 import (
 	"bytes"
@@ -8,65 +8,10 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/xwb1989/sqlparser"
+	"github.com/tablelandnetwork/sqlparser"
 )
 
-type SqliteRDB struct {
-	db *sql.DB
-}
-
-func NewSqliteRDB(url string) (*SqliteRDB, error) {
-	sqlite_db, err := sql.Open("sqlite3", url)
-	if err != nil {
-		return nil, err
-	}
-	return &SqliteRDB{db: sqlite_db}, nil
-}
-
-func (r *SqliteRDB) Execute(stmts string) ([]byte, error) {
-	return exec(r.db, stmts)
-}
-
-func (r *SqliteRDB) Start() error {
-	return nil
-}
-
-type PsqlRDB struct {
-	db       *sql.DB
-	host     string
-	port     int
-	user     string
-	password string
-	dbname   string
-}
-
-func NewPsqlRDB(host string, port int, user string, password string, dbname string) (*PsqlRDB, error) {
-	rdb := &PsqlRDB{
-		host:     host,
-		port:     port,
-		user:     user,
-		password: password,
-		dbname:   dbname,
-	}
-	return rdb, nil
-}
-
-func (r *PsqlRDB) Execute(stmts string) ([]byte, error) {
-	return exec(r.db, stmts)
-}
-
-func (r *PsqlRDB) Start() error {
-	connStr := fmt.Sprintf("%s:%d@%s/%s", r.host, r.port, r.user, r.password, r.dbname)
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return err
-	}
-	r.db = db
-	return nil
-}
-
-func exec(rdb *sql.DB, stmt string) ([]byte, error) {
+func exec(rdb *sql.DB, stmt string, rdbType string) ([]byte, error) {
 	// 第一步：拆分语句
 	statements := splitStatements(stmt)
 
@@ -74,7 +19,7 @@ func exec(rdb *sql.DB, stmt string) ([]byte, error) {
 	nodes := parseStatements(statements)
 
 	// 第三步：在事务中执行所有语句，使用 buffer writer 收集输出
-	return executeInTransaction(rdb, nodes, statements)
+	return executeInTransaction(rdb, nodes, rdbType)
 }
 
 // 分割 SQL 语句（简单按分号分割）
@@ -82,8 +27,8 @@ func splitStatements(stmt string) []string {
 	var statements []string
 
 	// 简单按分号分割
-	parts := strings.Split(stmt, ";")
-	for _, part := range parts {
+	parts := strings.SplitSeq(stmt, ";")
+	for part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
 			statements = append(statements, trimmed)
@@ -104,7 +49,7 @@ func parseStatements(statements []string) []sqlparser.Statement {
 	nodes := make([]sqlparser.Statement, 0, len(statements))
 
 	for i, stmt := range statements {
-		node, err := sqlparser.Parse(stmt)
+		ast, err := sqlparser.Parse(stmt)
 		if err != nil {
 			// 解析失败，记录日志但继续处理
 			fmt.Printf("[WARN] Statement %d parse failed: %v\n", i+1, err)
@@ -112,32 +57,34 @@ func parseStatements(statements []string) []sqlparser.Statement {
 			continue
 		}
 
+		// 新的 sqlparser 返回 AST，包含多个 statements
+		if len(ast.Statements) == 0 {
+			fmt.Printf("[WARN] Statement %d: no statements in AST\n", i+1)
+			nodes = append(nodes, nil)
+			continue
+		}
+
+		// 取第一个 statement
+		node := ast.Statements[0]
+
 		// 记录日志
-		sqlType := getNodeType(node)
+		var sqlType string
+		switch node.(type) {
+		case *sqlparser.Select:
+			sqlType = "DQL"
+		case *sqlparser.Insert, *sqlparser.Update, *sqlparser.Delete:
+			sqlType = "DML"
+		case *sqlparser.CreateTable, *sqlparser.AlterTable:
+			sqlType = "DDL"
+		default:
+			sqlType = "OTHER"
+		}
 		fmt.Printf("[INFO] Statement %d: %s - %s\n", i+1, sqlType, truncateSQL(stmt, 50))
 
 		nodes = append(nodes, node)
 	}
 
 	return nodes
-}
-
-// 获取节点类型
-func getNodeType(node sqlparser.Statement) string {
-	if node == nil {
-		return "UNKNOWN"
-	}
-
-	switch node.(type) {
-	case *sqlparser.Select:
-		return "DQL"
-	case *sqlparser.Insert, *sqlparser.Update, *sqlparser.Delete:
-		return "DML"
-	case *sqlparser.DDL:
-		return "DDL"
-	default:
-		return "OTHER"
-	}
 }
 
 // 截断 SQL 用于日志显示
@@ -151,7 +98,7 @@ func truncateSQL(sql string, maxLen int) string {
 }
 
 // 第三步：在事务中执行所有语句
-func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, statements []string) ([]byte, error) {
+func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, rdbType string) ([]byte, error) {
 	// 开启事务
 	tx, err := db.Begin()
 	if err != nil {
@@ -162,25 +109,24 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, statements []
 	var output bytes.Buffer
 
 	// 执行每条语句
-	for i, stmt := range statements {
-		node := nodes[i]
-		sqlType := getNodeType(node)
-
-		fmt.Printf("[INFO] Executing statement %d: %s\n", i+1, sqlType)
+	for i, node := range nodes {
+		fmt.Printf("[INFO] Executing statement %d\n", i+1)
 
 		var err error
-		switch sqlType {
-		case "DQL":
-			// 查询：输出 CSV（列头 + 数据）
+		switch node.(type) {
+		case *sqlparser.Select:
+			// DQL: 查询，输出 CSV（列头 + 数据）
+			stmt := node.String()
 			err = executeQueryToWriter(tx, stmt, &output)
-		case "DML":
-			// 修改：输出 JSON（rows_affected, last_insert_id）
+		case *sqlparser.Insert, *sqlparser.Update, *sqlparser.Delete:
+			// DML: 修改，输出 JSON（rows_affected, last_insert_id）
+			stmt := node.String()
 			err = executeExecToWriter(tx, stmt, &output)
-		case "DDL":
-			// 定义：输出 "OK"
-			err = executeDDLToWriter(tx, stmt, &output)
+		case *sqlparser.CreateTable, *sqlparser.AlterTable:
+			// DDL: 定义，传入 node 和 rdbType
+			err = executeDDLToWriter(tx, node, rdbType, &output)
 		default:
-			err = fmt.Errorf("unknown SQL type: %s", sqlType)
+			err = fmt.Errorf("unknown SQL type")
 		}
 
 		// 如果出错，回滚事务
@@ -190,7 +136,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, statements []
 		}
 
 		// 如果还有下一条语句，添加换行符分隔
-		if i < len(statements)-1 {
+		if i < len(nodes)-1 {
 			output.WriteString("\n\n")
 		}
 	}
@@ -280,7 +226,22 @@ func executeExecToWriter(tx *sql.Tx, stmt string, output *bytes.Buffer) error {
 }
 
 // 在事务中执行 DDL，输出 "OK" 到 writer
-func executeDDLToWriter(tx *sql.Tx, stmt string, output *bytes.Buffer) error {
+func executeDDLToWriter(tx *sql.Tx, node sqlparser.Statement, rdbType string, output *bytes.Buffer) error {
+	// 根据数据库类型应用 shim
+	var transformedNode sqlparser.Statement
+	switch rdbType {
+	case "postgres":
+		transformedNode = ddlShimPostgres(node)
+	case "sqlite":
+		transformedNode = ddlShimSqlite(node)
+	default:
+		transformedNode = node
+	}
+
+	// 从转换后的 node 生成 SQL
+	stmt := transformedNode.String()
+
+	// 执行 DDL
 	_, err := tx.Exec(stmt)
 	if err != nil {
 		return err

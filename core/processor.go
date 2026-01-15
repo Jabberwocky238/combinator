@@ -29,3 +29,12 @@ func (p *Processor) GetKV(id string) (KV, bool) {
 	kv, exists := p.kvMap[id]
 	return kv, exists
 }
+
+func (p *Processor) Start() error {
+	for _, rdb := range p.rdbMap {
+		if err := rdb.Start(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
