@@ -2,7 +2,7 @@
   "rdb": [
     {
       "id": "1",
-      "url": "sqlite:///:memory:"
+      "url": "sqlite://:memory:"
     }
   ]
 }

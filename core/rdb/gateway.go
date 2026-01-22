@@ -21,23 +21,30 @@ func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 }
 
 func (gw *RDBGateway) loadRDBs() error {
-	var err error
 	for _, rdbConf := range gw.rdbConf {
 		parsed, err := ParseRDBURL(rdbConf.URL)
+		if err != nil {
+			common.Logger.Errorf("Failed to parse RDB URL for %s: %v", rdbConf.ID, err)
+			return err
+		}
+
 		switch parsed.Type {
 		case "postgres":
 			gw.rdbMap[rdbConf.ID] = NewPsqlRDB(parsed.Host, parsed.Port, parsed.User, parsed.Password, parsed.DBName)
 		case "sqlite":
 			gw.rdbMap[rdbConf.ID] = NewSqliteRDB(parsed.Path)
 		default:
+			common.Logger.Errorf("Unsupported RDB type: %s", parsed.Type)
 			return err
 		}
+
 		if err = gw.rdbMap[rdbConf.ID].Start(); err != nil {
+			common.Logger.Errorf("Failed to start RDB %s: %v", rdbConf.ID, err)
 			return err
 		}
 		common.Logger.Infof("Loaded %s RDB: %s", parsed.Type, rdbConf.ID)
 	}
-	return err
+	return nil
 }
 
 func (gw *RDBGateway) Start() error {
