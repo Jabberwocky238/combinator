@@ -1,6 +1,7 @@
 package combinator
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -20,7 +21,7 @@ func NewGateway(endpoint string) *Gateway {
 
 	// 默认添加一个 id为 "1" 的 sqlite RDB 用于测试
 	processor.AddRDB("1", rdb.NewSqliteRDB(":memory:"))
-	processor.AddRDB("2", rdb.NewPsqlRDB("localhost", 5432, "combine1", "combine1", "combine1db"))
+	// processor.AddRDB("2", rdb.NewPsqlRDB("localhost", 5432, "combine1", "combine1", "combine1db"))
 
 	return &Gateway{
 		endpoint:  endpoint,
@@ -31,6 +32,7 @@ func NewGateway(endpoint string) *Gateway {
 func (g *Gateway) rdbHandler(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	rdbId := c.GetHeader("X-Combinator-RDB-ID")
+	rpcMethod := c.GetHeader("X-Combinator-RPC-Method")
 	if contentType != "application/sql" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type must be application/sql"})
 		return
@@ -56,7 +58,19 @@ func (g *Gateway) rdbHandler(c *gin.Context) {
 
 	stmt := string(body)
 	// 执行 SQL（所有逻辑在 RDB 层处理）
-	data, err := rdb.Execute(stmt)
+	var data []byte
+	switch rpcMethod {
+	case "Query":
+		data, err = rdb.Query(stmt)
+	case "Execute":
+		data, err = rdb.Execute(stmt)
+	case "Batch":
+		err = rdb.Batch(stmt)
+		data = []byte("OK")
+	default:
+		err = errors.New("")
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
