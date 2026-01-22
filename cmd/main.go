@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	combinator "jabberwocky238/combinator/core"
+	common "jabberwocky238/combinator/core/common"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,7 +23,7 @@ func main() {
 		return
 	}
 
-	var config combinator.Config
+	var config common.Config
 	err = json.Unmarshal(configJSON, &config)
 
 	gateway := combinator.NewGateway(&config)

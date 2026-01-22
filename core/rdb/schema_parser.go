@@ -1,4 +1,4 @@
-package combinator
+package rdb
 
 import (
 	"fmt"
@@ -6,15 +6,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-type Config struct {
-	Rdb []RDBConfig `json:"rdb"`
-}
-
-type RDBConfig struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
-}
 
 // ParsedRDBURL contains parsed database connection information
 type ParsedRDBURL struct {
