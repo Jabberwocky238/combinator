@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+type Config struct {
+	Rdb []RDBConfig `json:"rdb"`
+}
+
+type RDBConfig struct {
+	ID  string `json:"id"`
+	URL string `json:"url"`
+}
+
 // ParsedRDBURL contains parsed database connection information
 type ParsedRDBURL struct {
 	Type     string // "postgres" or "sqlite"

@@ -1,24 +1,8 @@
 {
-  "manager": {
-    "port": 10086,
-    "host": "localhost"
-  },
-  "physical_rdbs": [
+  "rdb": [
     {
-      "id": "psql-main",
-      "url": "postgres://postgres:postgres@localhost:5432/postgres"
+      "id": "1",
+      "url": "sqlite:///:memory:"
     }
-  ],
-  "physical_kvs": [],
-  "logical_rdbs": [
-    {
-      "id": "app-db-1",
-      "url": "postgres://app_user:app_pass@localhost:5432/app_database"
-    },
-    {
-      "id": "test-db",
-      "url": "sqlite://:memory:"
-    }
-  ],
-  "logical_kvs": []
+  ]
 }

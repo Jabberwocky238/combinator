@@ -4,14 +4,16 @@ go 1.25.3
 
 require github.com/gin-gonic/gin v1.11.0
 
-require github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
+require (
+	github.com/lib/pq v1.10.9
+	github.com/sirupsen/logrus v1.9.4
+	github.com/tablelandnetwork/sqlparser v0.0.0-20241016071222-2f0944bd7288
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/lib/pq v1.10.9 // indirect
-	github.com/tablelandnetwork/sqlparser v0.0.0-20241016071222-2f0944bd7288 // indirect
 )
 
 require (
