@@ -8,5 +8,11 @@
       "id": "2",
       "url": "postgres://combine1:combine1@localhost:5432/combine1db"
     }
+  ],
+  "kv": [
+    {
+      "id": "1",
+      "url": "memory://"
+    }
   ]
 }

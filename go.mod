@@ -7,13 +7,17 @@ require github.com/gin-gonic/gin v1.11.0
 require (
 	github.com/jabberwocky238/go-sqlparser v0.0.0-20250122000000-000000000000
 	github.com/lib/pq v1.10.9
+	github.com/linxGnu/grocksdb v1.10.4
+	github.com/redis/go-redis/v9 v9.3.0
 	github.com/sirupsen/logrus v1.9.4
 )
 
 replace github.com/jabberwocky238/go-sqlparser => ../go-sqlparser
 
 require (
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 )
