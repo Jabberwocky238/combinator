@@ -1,9 +1,12 @@
 package combinator
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"jabberwocky238/combinator/core/rdb"
 
@@ -29,55 +32,95 @@ func NewGateway(endpoint string) *Gateway {
 	}
 }
 
+// RDBRequest represents a JSON request for prepared statements
+type RDBRequest struct {
+	Type   string   `json:"type"`   // "query" or "exec"
+	Stmt   string   `json:"stmt"`   // SQL statement with ? placeholders
+	Params []any    `json:"params"` // Parameters to fill placeholders
+}
+
 func (g *Gateway) rdbHandler(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	rdbId := c.GetHeader("X-Combinator-RDB-ID")
-	rpcMethod := c.GetHeader("X-Combinator-RPC-Method")
-	if contentType != "application/sql" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type must be application/sql"})
-		return
-	}
+
 	if rdbId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id parameter is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Combinator-RDB-ID header is required"})
 		return
 	}
 
-	// 从 processor 中查找对应的 RDB
+	// Find the RDB from processor
 	rdb, exists := g.processor.GetRDB(rdbId)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "RDB not found for id: " + rdbId})
 		return
 	}
 
-	// 读取 SQL 语句
+	// Read request body
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
 		return
 	}
 
-	stmt := string(body)
-	// 执行 SQL（所有逻辑在 RDB 层处理）
 	var data []byte
-	switch rpcMethod {
-	case "Query":
-		data, err = rdb.Query(stmt)
-	case "Execute":
-		data, err = rdb.Execute(stmt)
-	case "Batch":
+
+	// Route based on Content-Type
+	if contentType == "application/json" {
+		// JSON request: parse and execute prepared statement
+		data, err = g.handleJSONRequest(rdb, body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		// Return response with appropriate content type
+		c.Data(http.StatusOK, "combinator/rdb", data)
+	} else {
+		// Text request: route to Batch for processing
+		stmt := string(body)
 		err = rdb.Batch(stmt)
-		data = []byte("OK")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		// Batch returns no data, just success
+		c.Data(http.StatusOK, "combinator/rdb", []byte("OK"))
+	}
+}
+
+// handleJSONRequest parses JSON request and executes prepared statement
+func (g *Gateway) handleJSONRequest(rdb RDB, body []byte) ([]byte, error) {
+	var req RDBRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, fmt.Errorf("invalid JSON format: %w", err)
+	}
+
+	// Validate request fields
+	if req.Type == "" {
+		return nil, errors.New("'type' field is required (must be 'query' or 'exec')")
+	}
+	if req.Stmt == "" {
+		return nil, errors.New("'stmt' field is required")
+	}
+
+	// Validate that stmt contains placeholders
+	if !strings.Contains(req.Stmt, "?") {
+		return nil, errors.New("'stmt' must contain '?' placeholders for prepared statements")
+	}
+
+	// Validate params array exists
+	if req.Params == nil {
+		return nil, errors.New("'params' field is required (must be an array)")
+	}
+
+	// Execute based on type
+	switch req.Type {
+	case "query":
+		return rdb.Query(req.Stmt, req.Params...)
+	case "exec":
+		return rdb.Execute(req.Stmt, req.Params...)
 	default:
-		err = errors.New("")
+		return nil, fmt.Errorf("invalid type '%s': must be 'query' or 'exec'", req.Type)
 	}
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 使用 RDB 返回的 Content-Type
-	c.Data(http.StatusOK, "combinator/rdb", data)
 }
 
 func (g *Gateway) Start() error {

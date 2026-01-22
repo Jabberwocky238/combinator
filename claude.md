@@ -132,3 +132,172 @@ Gateway 只负责：
 - 返回响应
 
 **不应该**在 Gateway 层做任何 SQL 解析或判断逻辑。
+
+---
+
+# Manager 架构设计
+
+## 概述
+
+Manager 是一个独立的管理服务，运行在端口 10086，负责管理物理数据库连接（superuser 权限）和逻辑数据库连接（受限权限）。
+
+## 架构层次
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Manager                              │
+│  - HTTP API (port 10086)                                    │
+│  - Physical RDB Map (superuser connections)                 │
+│  - Physical KV Map                                          │
+│  - Config file (JSON format)                                │
+└─────────────────────────────────────────────────────────────┘
+                    ↓ manages
+┌─────────────────────────────────────────────────────────────┐
+│                        Processor                             │
+│  - Logical RDB Map (limited user connections)               │
+│  - Logical KV Map                                           │
+│  - Only accesses specific databases with limited privileges │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Physical vs Logical 连接
+
+### Physical RDB (物理连接)
+- **权限**: Superuser (如 postgres 用户)
+- **用途**:
+  - 创建数据库
+  - 创建用户
+  - 授予权限
+  - 管理数据库结构
+- **管理**: 由 Manager 维护
+- **配置**: 在 config.json 的 `physical_rdbs` 中定义
+
+### Logical RDB (逻辑连接)
+- **权限**: 受限用户 (如 app_user)
+- **用途**:
+  - 应用程序日常数据库操作
+  - 只能访问特定数据库
+  - 不能创建数据库或用户
+- **管理**: 由 Processor 维护
+- **配置**: 在 config.json 的 `logical_rdbs` 中定义
+
+---
+
+## 配置文件格式
+
+配置文件使用 JSON 格式 (`config.json`)：
+
+```json
+{
+  "manager": {
+    "port": 10086,
+    "host": "localhost"
+  },
+  "physical_rdbs": [
+    {
+      "id": "psql-main",
+      "type": "postgres",
+      "host": "localhost",
+      "port": 5432,
+      "user": "postgres",
+      "password": "postgres",
+      "dbname": "postgres"
+    }
+  ],
+  "physical_kvs": [],
+  "logical_rdbs": [
+    {
+      "id": "app-db-1",
+      "type": "postgres",
+      "host": "localhost",
+      "port": 5432,
+      "user": "app_user",
+      "password": "app_pass",
+      "dbname": "app_database"
+    }
+  ],
+  "logical_kvs": []
+}
+```
+
+---
+
+## Manager HTTP API
+
+Manager 提供简单的 HTTP API (端口 10086)，所有操作使用 GET 请求。
+
+### API 端点
+
+#### 1. 健康检查
+```
+GET /health
+```
+
+#### 2. 列出所有 Physical RDBs
+```
+GET /api/physical/rdbs
+```
+
+#### 3. 列出数据库
+```
+GET /api/physical/rdbs/:id/databases
+```
+
+#### 4. 创建 Logical RDB (合并操作)
+```
+GET /api/logical/rdb/create?rdb_id=<id>&db_name=<name>&username=<user>&password=<pass>
+```
+
+这个端点会自动执行：
+- 创建数据库
+- 创建用户
+- 授予权限
+
+---
+
+## CLI 工具
+
+CLI 工具位于 `cmd/cli/main.go`，本质是对 Manager API 的封装调用。
+
+### 安装和使用
+
+```bash
+# 构建 CLI
+go build -o combinator-cli ./cmd/cli
+
+# 使用 CLI
+./combinator-cli <command> [args]
+```
+
+### 命令列表
+
+#### 1. 列出所有 Physical RDBs (Manager 管理的)
+```bash
+combinator-cli manager rdb list
+```
+
+#### 2. 列出所有 Logical RDBs (Processor 使用的)
+```bash
+combinator-cli rdb list
+```
+
+#### 3. 列出数据库
+```bash
+combinator-cli rdb databases <rdb_id>
+```
+
+#### 4. 创建 Logical RDB (一次性完成：创建数据库 + 创建用户 + 授予权限)
+```bash
+combinator-cli create <rdb_id> <db_name> <username> <password>
+```
+
+**示例**:
+```bash
+# 在 psql-main 上创建一个新的应用数据库
+combinator-cli create psql-main myapp myapp_user myapp_pass
+```
+
+这个命令会自动执行：
+1. 创建数据库 `myapp`
+2. 创建用户 `myapp_user` (密码: `myapp_pass`)
+3. 授予 `myapp_user` 对 `myapp` 数据库的所有权限
