@@ -9,7 +9,7 @@ type RDB interface {
 	Service
 	Batch(stmts string) error
 	Query(stmt string, args ...any) (data []byte, err error)
-	Execute(stmt string, args ...any) (data []byte, err error)
+	Execute(stmt string, args ...any) (lastInsertId int, rowsAffected int, err error)
 }
 
 type KV interface {

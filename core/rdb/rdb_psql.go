@@ -3,7 +3,6 @@ package rdb
 import (
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -33,37 +32,33 @@ func NewPsqlRDB(host string, port int, user string, password string, dbname stri
 }
 
 // Execute executes a DML/DDL statement with optional parameters
-func (r *PsqlRDB) Execute(stmt string, args ...any) ([]byte, error) {
+func (r *PsqlRDB) Execute(stmt string, args ...any) (lastInsertId int, rowsAffected int, err error) {
 	// Convert ? placeholders to $1, $2, etc. for PostgreSQL
-	stmt, err := convertPlaceholders(stmt)
+	stmt, err = convertPlaceholders(stmt)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	// Validate parameters
 	if err := validateParamsPsql(stmt, args); err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	result, err := r.db.Exec(stmt, args...)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	lastInsertId := int64(0) // PostgreSQL doesn't support LastInsertId
-
-	resultMap := map[string]interface{}{
-		"rows_affected":  rowsAffected,
-		"last_insert_id": lastInsertId,
-	}
-
-	jsonData, err := json.Marshal(resultMap)
+	rowsAffected64, err := result.RowsAffected()
 	if err != nil {
-		return nil, err
+		return 0, 0, err
+	}
+	lastInsertId64, err := result.LastInsertId()
+	if err != nil {
+		return 0, 0, err
 	}
 
-	return jsonData, nil
+	return int(lastInsertId64), int(rowsAffected64), nil
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV

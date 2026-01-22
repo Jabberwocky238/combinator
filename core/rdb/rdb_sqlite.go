@@ -3,7 +3,6 @@ package rdb
 import (
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -22,31 +21,20 @@ func NewSqliteRDB(url string) *SqliteRDB {
 }
 
 // Execute executes a DML/DDL statement with optional parameters
-func (r *SqliteRDB) Execute(stmt string, args ...any) ([]byte, error) {
+func (r *SqliteRDB) Execute(stmt string, args ...any) (int, int, error) {
 	// Validate parameters
 	if err := validateParams(stmt, args); err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	result, err := r.db.Exec(stmt, args...)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	lastInsertId, _ := result.LastInsertId()
-
-	resultMap := map[string]interface{}{
-		"rows_affected":  rowsAffected,
-		"last_insert_id": lastInsertId,
-	}
-
-	jsonData, err := json.Marshal(resultMap)
-	if err != nil {
-		return nil, err
-	}
-
-	return jsonData, nil
+	return int(lastInsertId), int(rowsAffected), nil
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV

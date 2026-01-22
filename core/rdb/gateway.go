@@ -52,8 +52,8 @@ func (gw *RDBGateway) Start() error {
 	gw.grg.Use(middlewareRDB())
 	{
 		gw.grg.POST("/query", gw.handleQuery)
-		gw.grg.POST("/exec", handleExec)
-		gw.grg.POST("/batch", handleBatch)
+		gw.grg.POST("/exec", gw.handleExec)
+		gw.grg.POST("/batch", gw.handleBatch)
 	}
 
 	return nil
@@ -80,9 +80,7 @@ type RDBQueryRequest struct {
 }
 
 func (gw *RDBGateway) handleQuery(c *gin.Context) {
-	rdbId, _ := c.Get("rdb_id")
-
-	rdb := gw.rdbMap[rdbId.(string)]
+	rdb := gw.rdbMap[c.GetString("rdb_id")]
 	if rdb == nil {
 		c.JSON(400, gin.H{"error": "invalid RDB ID"})
 		return
@@ -96,28 +94,70 @@ func (gw *RDBGateway) handleQuery(c *gin.Context) {
 	}
 
 	// 设置响应头为 CSV 流式输出
+	data, err := rdb.Query(req.Stmt, req.Args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.Header("Content-Type", "text/csv")
-	c.Header("Transfer-Encoding", "chunked")
-	c.Status(200)
-
-	// 流式写入 CSV 数据
-	writer := c.Writer
-
-	// 示例：写入 CSV 头和数据
-	io.WriteString(writer, "id,name,value\n")
-	writer.Flush()
-
-	// TODO: 从数据库结果集逐行写入
-	io.WriteString(writer, "1,test,100\n")
-	writer.Flush()
+	c.Writer.Write(data)
 }
 
-func handleExec(c *gin.Context) {
-	// TODO: 处理执行请求
-	c.JSON(200, gin.H{"message": "exec endpoint"})
+type RDBExecRequest struct {
+	Stmt string `json:"stmt"`
+	Args []any  `json:"args"`
 }
 
-func handleBatch(c *gin.Context) {
-	// TODO: 处理批量请求
-	c.JSON(200, gin.H{"message": "batch endpoint"})
+type RDBExecResponse struct {
+	LastInsertId int `json:"last_insert_id"`
+	RowsAffected int `json:"rows_affected"`
+}
+
+func (gw *RDBGateway) handleExec(c *gin.Context) {
+	rdb := gw.rdbMap[c.GetString("rdb_id")]
+	if rdb == nil {
+		c.JSON(400, gin.H{"error": "invalid RDB ID"})
+		return
+	}
+
+	var req RDBExecRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	lastInsertId, rowsAffected, err := rdb.Execute(req.Stmt, req.Args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var resp RDBExecResponse
+	resp.LastInsertId = lastInsertId
+	resp.RowsAffected = rowsAffected
+
+	c.JSON(200, resp)
+}
+
+func (gw *RDBGateway) handleBatch(c *gin.Context) {
+	rdb := gw.rdbMap[c.GetString("rdb_id")]
+	if rdb == nil {
+		c.JSON(400, gin.H{"error": "invalid RDB ID"})
+		return
+	}
+
+	stmts, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	err = rdb.Batch(string(stmts))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.String(200, "OK")
 }
