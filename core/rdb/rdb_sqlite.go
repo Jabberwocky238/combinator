@@ -97,7 +97,7 @@ func (r *SqliteRDB) Query(stmt string, args ...any) ([]byte, error) {
 }
 
 // Batch executes multiple SQL statements (text format)
-func (r *SqliteRDB) Batch(stmts string) error {
+func (r *SqliteRDB) Batch(stmts []string) error {
 	_, err := exec(r.db, stmts, r.Type())
 	return err
 }

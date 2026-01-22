@@ -1,8 +1,6 @@
 package rdb
 
 import (
-	"io"
-
 	"github.com/gin-gonic/gin"
 
 	common "jabberwocky238/combinator/core/common"
@@ -147,13 +145,14 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 		return
 	}
 
-	stmts, err := io.ReadAll(c.Request.Body)
-	if err != nil {
+	// 直接解析 JSON 数组
+	var stmtList []string
+	if err := c.ShouldBindJSON(&stmtList); err != nil {
 		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	err = rdb.Batch(string(stmts))
+	err := rdb.Batch(stmtList)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

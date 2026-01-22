@@ -127,7 +127,7 @@ func (r *PsqlRDB) Query(stmt string, args ...any) ([]byte, error) {
 }
 
 // Batch executes multiple SQL statements (text format)
-func (r *PsqlRDB) Batch(stmts string) error {
+func (r *PsqlRDB) Batch(stmts []string) error {
 	_, err := exec(r.db, stmts, r.Type())
 	return err
 }

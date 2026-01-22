@@ -11,37 +11,12 @@ import (
 	"github.com/tablelandnetwork/sqlparser"
 )
 
-func exec(rdb *sql.DB, stmt string, rdbType string) ([]byte, error) {
-	// 第一步：拆分语句
-	statements := splitStatements(stmt)
-
+func exec(rdb *sql.DB, stmts []string, rdbType string) ([]byte, error) {
 	// 第二步：解析语句（带日志）
-	nodes := parseStatements(statements)
+	nodes := parseStatements(stmts)
 
 	// 第三步：在事务中执行所有语句，使用 buffer writer 收集输出
 	return executeInTransaction(rdb, nodes, rdbType)
-}
-
-// 分割 SQL 语句（简单按分号分割）
-func splitStatements(stmt string) []string {
-	var statements []string
-
-	// 简单按分号分割
-	parts := strings.SplitSeq(stmt, ";")
-	for part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			statements = append(statements, trimmed)
-		}
-	}
-
-	// 添加调试日志
-	fmt.Printf("[DEBUG] Split into %d statements\n", len(statements))
-	for i, s := range statements {
-		fmt.Printf("[DEBUG] Statement %d: %s\n", i+1, truncateSQL(s, 50))
-	}
-
-	return statements
 }
 
 // 第二步：解析语句（带日志）
