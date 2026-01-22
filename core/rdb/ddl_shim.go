@@ -47,7 +47,7 @@ func filterOutAutoIncrement(columnConstraint []sqlparser.ColumnConstraint) []sql
 
 // ddlShimSqlite 保持 SQLite 语法不变
 func ddlShimSqlite(node sqlparser.Statement) sqlparser.Statement {
-	// SQLite 不需要转换
+
 	return node
 }
 
@@ -59,13 +59,13 @@ func isAutoIncrementColumn(col *sqlparser.ColumnDef) bool {
 		return false
 	}
 
-	// 遍历列的约束，检查是否有 PRIMARY KEY 且带 AUTOINCREMENT
+	// 遍历列的约束，检查是否有 PRIMARY KEY
+	// 在 SQLite 中，INTEGER PRIMARY KEY 会自动使用 rowid，即使没有 AUTOINCREMENT 关键字
+	// 所以我们需要将 INTEGER PRIMARY KEY 转换为 PostgreSQL 的 SERIAL PRIMARY KEY
 	for _, constraint := range col.Constraints {
-		if pk, ok := constraint.(*sqlparser.ColumnConstraintPrimaryKey); ok {
-			// 只有当明确标记了 AutoIncrement 时才转换
-			if pk.AutoIncrement {
-				return true
-			}
+		if _, ok := constraint.(*sqlparser.ColumnConstraintPrimaryKey); ok {
+			// 只要是 INTEGER PRIMARY KEY，就转换为 SERIAL
+			return true
 		}
 	}
 

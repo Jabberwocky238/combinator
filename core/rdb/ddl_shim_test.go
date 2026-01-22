@@ -21,7 +21,7 @@ func TestDDLShimUniqueness(t *testing.T) {
 				name TEXT NOT NULL,
 				age INTEGER
 			)`,
-			expectPostgres: "create table users(id serial primary key autoincrement,name text not null,age integer)",
+			expectPostgres: "create table users(id serial primary key,name text not null,age integer)",
 			expectSqlite:   "create table users(id integer primary key autoincrement,name text not null,age integer)",
 		},
 		{

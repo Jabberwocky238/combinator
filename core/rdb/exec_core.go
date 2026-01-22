@@ -97,7 +97,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, rdbType strin
 			// DML: 修改，输出 JSON（rows_affected, last_insert_id）
 			stmt := node.String()
 			err = executeExecToWriter(tx, stmt, &output)
-		case *sqlparser.CreateTable, *sqlparser.AlterTable:
+		case *sqlparser.CreateTable, *sqlparser.AlterTable, *sqlparser.DropTable:
 			// DDL: 定义，传入 node 和 rdbType
 			err = executeDDLToWriter(tx, node, rdbType, &output)
 		default:
