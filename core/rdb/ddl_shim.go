@@ -3,7 +3,7 @@ package rdb
 import (
 	"strings"
 
-	"github.com/tablelandnetwork/sqlparser"
+	sqlparser "github.com/jabberwocky238/go-sqlparser"
 )
 
 // ddlShimPostgres 将 SQLite 自增语法转换为 PostgreSQL 语法
@@ -23,10 +23,26 @@ func ddlShimPostgres(node sqlparser.Statement) sqlparser.Statement {
 		if isAutoIncrementColumn(col) {
 			// 转换为 SERIAL
 			col.Type = "serial"
+			col.Constraints = filterOutAutoIncrement(col.Constraints)
 		}
 	}
 
 	return createTable
+}
+
+func filterOutAutoIncrement(columnConstraint []sqlparser.ColumnConstraint) []sqlparser.ColumnConstraint {
+	filtered := make([]sqlparser.ColumnConstraint, 0, len(columnConstraint))
+	for _, constraint := range columnConstraint {
+		if pk, ok := constraint.(*sqlparser.ColumnConstraintPrimaryKey); ok {
+			// 创建一个新的 ColumnConstraintPrimaryKey，去掉 AutoIncrement 标记
+			newPK := *pk
+			newPK.AutoIncrement = false
+			filtered = append(filtered, &newPK)
+		} else {
+			filtered = append(filtered, constraint)
+		}
+	}
+	return filtered
 }
 
 // ddlShimSqlite 保持 SQLite 语法不变

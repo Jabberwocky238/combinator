@@ -2,7 +2,7 @@ import requests
 
 
 headers = {
-    "X-Combinator-RDB-ID": "1"
+    "X-Combinator-RDB-ID": "2"
 }
 
 def test_batch_endpoint():
@@ -31,7 +31,6 @@ def test_exec_endpoint():
     response = requests.post(url, json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert 'last_insert_id' in data
     assert 'rows_affected' in data
     
 def test_query_endpoint():
@@ -44,6 +43,7 @@ def test_query_endpoint():
     assert response.status_code == 200
     assert response.headers['Content-Type'] == 'application/csv'
     assert response.text.count('\n') >= 4  # At least header + 3 rows
+    print(response.text)
     
 if __name__ == "__main__":
     test_batch_endpoint()

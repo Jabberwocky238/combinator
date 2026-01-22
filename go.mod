@@ -5,10 +5,12 @@ go 1.25.3
 require github.com/gin-gonic/gin v1.11.0
 
 require (
+	github.com/jabberwocky238/go-sqlparser v0.0.0-20250122000000-000000000000
 	github.com/lib/pq v1.10.9
 	github.com/sirupsen/logrus v1.9.4
-	github.com/tablelandnetwork/sqlparser v0.0.0-20241016071222-2f0944bd7288
 )
+
+replace github.com/jabberwocky238/go-sqlparser => ../go-sqlparser
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

@@ -22,20 +22,19 @@ func NewSqliteRDB(url string) *SqliteRDB {
 }
 
 // Execute executes a DML/DDL statement with optional parameters
-func (r *SqliteRDB) Execute(stmt string, args ...any) (int, int, error) {
+func (r *SqliteRDB) Execute(stmt string, args ...any) (int, error) {
 	// Validate parameters
 	if err := validateParams(stmt, args); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	result, err := r.db.Exec(stmt, args...)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	rowsAffected, _ := result.RowsAffected()
-	lastInsertId, _ := result.LastInsertId()
-	return int(lastInsertId), int(rowsAffected), nil
+	return int(rowsAffected), nil
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV

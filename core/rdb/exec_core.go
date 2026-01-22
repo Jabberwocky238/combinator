@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tablelandnetwork/sqlparser"
+	sqlparser "github.com/jabberwocky238/go-sqlparser"
 )
 
 func exec(rdb *sql.DB, stmts []string, rdbType string) ([]byte, error) {

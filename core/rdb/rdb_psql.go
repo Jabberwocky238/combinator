@@ -32,33 +32,29 @@ func NewPsqlRDB(host string, port int, user string, password string, dbname stri
 }
 
 // Execute executes a DML/DDL statement with optional parameters
-func (r *PsqlRDB) Execute(stmt string, args ...any) (lastInsertId int, rowsAffected int, err error) {
+func (r *PsqlRDB) Execute(stmt string, args ...any) (rowsAffected int, err error) {
 	// Convert ? placeholders to $1, $2, etc. for PostgreSQL
 	stmt, err = convertPlaceholders(stmt)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	// Validate parameters
 	if err := validateParamsPsql(stmt, args); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	result, err := r.db.Exec(stmt, args...)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	rowsAffected64, err := result.RowsAffected()
 	if err != nil {
-		return 0, 0, err
-	}
-	lastInsertId64, err := result.LastInsertId()
-	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
-	return int(lastInsertId64), int(rowsAffected64), nil
+	return int(rowsAffected64), nil
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV

@@ -105,7 +105,7 @@ func (gw *RDBGateway) handleQuery(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Type", "application/csv")
 	c.Writer.Write(data)
 }
 
@@ -115,7 +115,6 @@ type RDBExecRequest struct {
 }
 
 type RDBExecResponse struct {
-	LastInsertId int `json:"last_insert_id"`
 	RowsAffected int `json:"rows_affected"`
 }
 
@@ -132,14 +131,14 @@ func (gw *RDBGateway) handleExec(c *gin.Context) {
 		return
 	}
 
-	lastInsertId, rowsAffected, err := rdb.Execute(req.Stmt, req.Args...)
+	rowsAffected, err := rdb.Execute(req.Stmt, req.Args...)
 	if err != nil {
+		common.Logger.Errorf("Execute failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	var resp RDBExecResponse
-	resp.LastInsertId = lastInsertId
 	resp.RowsAffected = rowsAffected
 
 	c.JSON(200, resp)
@@ -161,6 +160,7 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 
 	err := rdb.Batch(stmtList)
 	if err != nil {
+		common.Logger.Errorf("Batch execution failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
