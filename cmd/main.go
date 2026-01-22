@@ -2,15 +2,27 @@ package main
 
 import (
 	"fmt"
-	combinator "jabberwocky238/combinator/core"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"jabberwocky238/combinator/core/config"
+	"jabberwocky238/combinator/core/manager"
 )
 
 func main() {
-	// 创建 gateway
-	gateway := combinator.NewGateway("localhost:8899")
+	// 加载配置文件（如果不存在则使用默认配置）
+	configPath := "config.json"
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
+
+	cfg, err := loadOrCreateDefaultConfig(configPath)
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
 
 	// 启动信号监听
 	sigChan := make(chan os.Signal, 1)

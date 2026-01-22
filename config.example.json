@@ -6,29 +6,18 @@
   "physical_rdbs": [
     {
       "id": "psql-main",
-      "type": "postgres",
-      "host": "localhost",
-      "port": 5432,
-      "user": "postgres",
-      "password": "postgres",
-      "dbname": "postgres"
-    },
-    {
-      "id": "sqlite-main",
-      "type": "sqlite",
-      "url": "/var/data/main.db"
+      "url": "postgres://postgres:postgres@localhost:5432/postgres"
     }
   ],
   "physical_kvs": [],
   "logical_rdbs": [
     {
       "id": "app-db-1",
-      "type": "postgres",
-      "host": "localhost",
-      "port": 5432,
-      "user": "app_user",
-      "password": "app_pass",
-      "dbname": "app_database"
+      "url": "postgres://app_user:app_pass@localhost:5432/app_database"
+    },
+    {
+      "id": "test-db",
+      "url": "sqlite://:memory:"
     }
   ],
   "logical_kvs": []

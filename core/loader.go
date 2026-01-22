@@ -1,4 +1,4 @@
-package config
+package combinator
 
 import (
 	"encoding/json"
