@@ -1,4 +1,10 @@
-dev: 
-	go run cmd/main.go
+BUILD_TAGS=rdb_psql
+# BUILD_TAGS=kv_rocksdb,rdb_psql
 
-.PHONY: dev
+dev:
+	go run -tags=$(BUILD_TAGS) cmd/main.go
+
+build:
+	go build -tags=$(BUILD_TAGS) -o bin/combinator cmd/main.go
+
+.PHONY: dev build

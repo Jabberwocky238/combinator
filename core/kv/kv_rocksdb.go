@@ -1,13 +1,14 @@
-//go:build rocksdb
-// +build rocksdb
+//go:build kv_rocksdb
+// +build kv_rocksdb
 
 package kv
 
 import (
 	"fmt"
 
-	"github.com/linxGnu/grocksdb"
 	common "jabberwocky238/combinator/core/common"
+
+	"github.com/linxGnu/grocksdb"
 )
 
 func init() {

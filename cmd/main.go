@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	combinator "jabberwocky238/combinator/core"
 	common "jabberwocky238/combinator/core/common"
@@ -10,14 +11,20 @@ import (
 	"syscall"
 )
 
-func main() {
-	// 加载配置文件（如果不存在则使用默认配置）
-	configPath := "config.example.json"
-	if len(os.Args) > 1 {
-		configPath = os.Args[1]
-	}
+var configPath = flag.String("c", "config.json", "配置文件路径")
+var listenAddr = flag.String("l", "localhost:8899", "监听地址")
 
-	configJSON, err := os.ReadFile(configPath)
+func cmdParsing() {
+	// 解析命令行参数
+	flag.StringVar(configPath, "config", "config.json", "配置文件路径")
+	flag.StringVar(listenAddr, "listen", "localhost:8899", "监听地址")
+	flag.Parse()
+}
+
+func main() {
+	cmdParsing()
+	// 加载配置文件
+	configJSON, err := os.ReadFile(*configPath)
 	if err != nil {
 		fmt.Printf("Failed to read config file: %v\n", err)
 		return
@@ -34,8 +41,8 @@ func main() {
 
 	// 在 goroutine 中启动 gateway
 	go func() {
-		fmt.Println("Starting gateway server...")
-		if err := gateway.Start("localhost:8899"); err != nil {
+		fmt.Printf("Starting gateway server on %s...\n", *listenAddr)
+		if err := gateway.Start(*listenAddr); err != nil {
 			fmt.Printf("Gateway error: %v\n", err)
 			os.Exit(1)
 		}

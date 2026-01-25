@@ -1,6 +1,8 @@
 package combinator
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	common "jabberwocky238/combinator/core/common"
@@ -16,6 +18,16 @@ type Gateway struct {
 
 func NewGateway(conf *common.Config) *Gateway {
 	r := gin.Default()
+	r.Use(gin.Recovery())
+
+	// Health check endpoint
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"service": "combinator",
+		})
+	})
+
 	return &Gateway{
 		g:          r,
 		rdbGateway: rdbModule.NewGateway(r.Group("/rdb"), conf.Rdb),
