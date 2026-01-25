@@ -3,7 +3,7 @@ package rdb
 import (
 	"strings"
 
-	sqlparser "github.com/jabberwocky238/go-sqlparser"
+	sqlparser "github.com/jabberwocky238/sqlparser"
 )
 
 // ddlShimPostgres 将 SQLite 自增语法转换为 PostgreSQL 语法

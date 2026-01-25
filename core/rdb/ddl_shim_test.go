@@ -3,7 +3,7 @@ package rdb
 import (
 	"testing"
 
-	"github.com/jabberwocky238/go-sqlparser"
+	"github.com/jabberwocky238/sqlparser"
 )
 
 // TestDDLShimUniqueness 测试以 SQLite 为标准的 DDL 在两种数据库上的 shim 转换唯一性
