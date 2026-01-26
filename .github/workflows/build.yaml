@@ -29,9 +29,10 @@ jobs:
     - name: Upload Binary
       uses: actions/upload-artifact@v4
       with:
-        name: combinator-binary-${{ github.sha }}
+        name: combinator-exe
         path: bin/combinator
         retention-days: 7
+        compression-level: 0
 
   build-docker:
     runs-on: ubuntu-latest
@@ -90,13 +91,13 @@ jobs:
           });
 
           const binaryArtifacts = artifacts.data.artifacts
-            .filter(a => a.name.startsWith('combinator-binary-'))
+            .filter(a => a.name === 'combinator-exe')
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
           const toDelete = binaryArtifacts.slice(3);
 
           for (const artifact of toDelete) {
-            console.log(`Deleting artifact: ${artifact.name}`);
+            console.log(`Deleting artifact: ${artifact.name} (${artifact.created_at})`);
             await github.rest.actions.deleteArtifact({
               owner: context.repo.owner,
               repo: context.repo.repo,
