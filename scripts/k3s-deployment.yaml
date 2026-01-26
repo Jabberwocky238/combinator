@@ -35,17 +35,17 @@ data:
     \c combine1db;
 
     -- 示例表
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS longlivecombinator (
       id SERIAL PRIMARY KEY,
-      username VARCHAR(50) NOT NULL,
-      email VARCHAR(100) NOT NULL,
+      whoami VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     -- 插入测试数据
-    INSERT INTO users (username, email) VALUES
-      ('alice', 'alice@example.com'),
-      ('bob', 'bob@example.com');
+    INSERT INTO longlivecombinator (whoami) VALUES
+      ('vector'),
+      ('slico'),
+      ('jinx');
 
 ---
 # PostgreSQL PVC
