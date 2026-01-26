@@ -163,6 +163,15 @@ spec:
         image: redis:7-alpine
         ports:
         - containerPort: 6379
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                sleep 3
+                redis-cli SET MOTO "拨得云开见月明"
         volumeMounts:
         - name: redis-storage
           mountPath: /data
