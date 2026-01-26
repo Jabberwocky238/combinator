@@ -5,14 +5,12 @@ go 1.25.3
 require github.com/gin-gonic/gin v1.11.0
 
 require (
-	github.com/jabberwocky238/sqlparser v0.0.0-20250122000000-000000000000
+	github.com/jabberwocky238/sqlparser v0.0.2
 	github.com/lib/pq v1.10.9
 	github.com/linxGnu/grocksdb v1.10.4
 	github.com/redis/go-redis/v9 v9.3.0
 	github.com/sirupsen/logrus v1.9.4
 )
-
-replace github.com/jabberwocky238/sqlparser => ../sqlparser
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
