@@ -16,14 +16,19 @@ type Gateway struct {
 	kvGateway  *kvModule.KVGateway
 }
 
-func NewGateway(conf *common.Config) *Gateway {
+func NewGateway(confIn *common.Config) *Gateway {
+	conf, err := configCheck(confIn)
+	if err != nil {
+		panic(err)
+	}
+
 	r := gin.Default()
 	r.Use(gin.Recovery())
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
+			"status":  "ok",
 			"service": "combinator",
 		})
 	})
@@ -33,6 +38,23 @@ func NewGateway(conf *common.Config) *Gateway {
 		rdbGateway: rdbModule.NewGateway(r.Group("/rdb"), conf.Rdb),
 		kvGateway:  kvModule.NewGateway(r.Group("/kv"), conf.Kv),
 	}
+}
+
+func configCheck(confs *common.Config) (common.Config, error) {
+	var resConf common.Config
+	for _, rdbConf := range confs.Rdb {
+		if !rdbConf.Enabled {
+			continue
+		}
+		resConf.Rdb = append(resConf.Rdb, rdbConf)
+	}
+	for _, kvConf := range confs.Kv {
+		if !kvConf.Enabled {
+			continue
+		}
+		resConf.Kv = append(resConf.Kv, kvConf)
+	}
+	return resConf, nil
 }
 
 func (gw *Gateway) Start(addr string) error {

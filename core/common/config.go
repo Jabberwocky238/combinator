@@ -6,11 +6,13 @@ type Config struct {
 }
 
 type RDBConfig struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled,omitempty"`
+	URL     string `json:"url"`
 }
 
 type KVConfig struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled,omitempty"`
+	URL     string `json:"url"`
 }

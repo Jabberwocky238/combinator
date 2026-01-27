@@ -1,54 +1,27 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	combinator "jabberwocky238/combinator/core"
-	common "jabberwocky238/combinator/core/common"
-	"os"
-	"os/signal"
-	"syscall"
+	"github.com/spf13/cobra"
 )
 
-var configPath = flag.String("c", "config.json", "配置文件路径")
-var listenAddr = flag.String("l", "localhost:8899", "监听地址")
+var rootCmd = &cobra.Command{
+	Use:   "combinator",
+	Short: "Combinator - 多数据库网关服务",
+	Long:  "Combinator 是一个统一的 HTTP API 网关，支持多种数据库后端（RDB 和 KV）",
+}
 
-func cmdParsing() {
-	// 解析命令行参数
-	flag.StringVar(configPath, "config", "config.json", "配置文件路径")
-	flag.StringVar(listenAddr, "listen", "localhost:8899", "监听地址")
-	flag.Parse()
+var runCmd = &cobra.Command{
+	Use:   "run",
+	Short: "运行各种任务",
 }
 
 func main() {
-	cmdParsing()
-	// 加载配置文件
-	configJSON, err := os.ReadFile(*configPath)
-	if err != nil {
-		fmt.Printf("Failed to read config file: %v\n", err)
+	// 显式注册所有命令
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(runCmd)
+	runCmd.AddCommand(migrateCmd)
+
+	if err := rootCmd.Execute(); err != nil {
 		return
 	}
-
-	var config common.Config
-	err = json.Unmarshal(configJSON, &config)
-
-	gateway := combinator.NewGateway(&config)
-
-	// 启动信号监听
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// 在 goroutine 中启动 gateway
-	go func() {
-		fmt.Printf("Starting gateway server on %s...\n", *listenAddr)
-		if err := gateway.Start(*listenAddr); err != nil {
-			fmt.Printf("Gateway error: %v\n", err)
-			os.Exit(1)
-		}
-	}()
-
-	// 阻塞等待 Ctrl+C
-	<-sigChan
-	fmt.Println("\nReceived interrupt signal, shutting down gracefully...")
 }
