@@ -63,6 +63,13 @@ func (r *RedisKV) Start() error {
 	return err
 }
 
+func (r *RedisKV) Close() error {
+	if r.client != nil {
+		return r.client.Close()
+	}
+	return nil
+}
+
 // Type returns the KV store type
 func (r *RedisKV) Type() string {
 	return "redis"

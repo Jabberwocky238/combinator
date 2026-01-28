@@ -1,6 +1,9 @@
 package combinator
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -74,4 +77,50 @@ func (gw *Gateway) Start(addr string) error {
 	}
 
 	return gw.g.Run(addr)
+}
+
+// Reload 重新加载配置
+func (gw *Gateway) Reload(confIn *common.Config) error {
+	conf, err := configCheck(confIn)
+	if err != nil {
+		return err
+	}
+
+	// 重新加载 RDB Gateway
+	if err := gw.rdbGateway.Reload(conf.Rdb); err != nil {
+		return err
+	}
+
+	// 重新加载 KV Gateway
+	if err := gw.kvGateway.Reload(conf.Kv); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// API 监听
+func (gw *Gateway) SetupReloadAPI(reloadChan chan<- *common.Config) {
+	gw.g.POST("/reload", func(c *gin.Context) {
+		if c.Request.Method != http.MethodPost {
+			c.JSON(405, gin.H{"error": "Method not allowed"})
+			return
+		}
+
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Failed to read body"})
+			return
+		}
+
+		var config common.Config
+		if err := json.Unmarshal(body, &config); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+
+		fmt.Println("🔄 Received reload request via API...")
+		reloadChan <- &config
+		c.String(200, "Config Reloaded")
+	})
 }

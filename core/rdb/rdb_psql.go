@@ -114,6 +114,13 @@ func (r *PsqlRDB) Start() error {
 	return nil
 }
 
+func (r *PsqlRDB) Close() error {
+	if r.db != nil {
+		return r.db.Close()
+	}
+	return nil
+}
+
 func (r *PsqlRDB) Type() string {
 	return "postgres"
 }

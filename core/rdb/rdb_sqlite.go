@@ -76,6 +76,13 @@ func (r *SqliteRDB) Start() error {
 	return nil
 }
 
+func (r *SqliteRDB) Close() error {
+	if r.db != nil {
+		return r.db.Close()
+	}
+	return nil
+}
+
 func (r *SqliteRDB) Type() string {
 	return "sqlite"
 }

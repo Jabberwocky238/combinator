@@ -22,35 +22,8 @@ func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 	}
 }
 
-func (gw *RDBGateway) loadRDBs() error {
-	for _, rdbConf := range gw.rdbConf {
-		parsed, err := ParseRDBURL(rdbConf.URL)
-		if err != nil {
-			common.Logger.Errorf("Failed to parse RDB URL for %s: %v", rdbConf.ID, err)
-			return err
-		}
-
-		switch parsed.Type {
-		case "postgres":
-			gw.rdbMap[rdbConf.ID] = NewPsqlRDB(parsed.Host, parsed.Port, parsed.User, parsed.Password, parsed.DBName)
-		case "sqlite":
-			gw.rdbMap[rdbConf.ID] = NewSqliteRDB(parsed.Path)
-		default:
-			common.Logger.Errorf("Unsupported RDB type: %s", parsed.Type)
-			return err
-		}
-
-		if err = gw.rdbMap[rdbConf.ID].Start(); err != nil {
-			common.Logger.Errorf("Failed to start RDB %s: %v", rdbConf.ID, err)
-			return err
-		}
-		common.Logger.Infof("Loaded %s RDB: %s", parsed.Type, rdbConf.ID)
-	}
-	return nil
-}
-
 func (gw *RDBGateway) Start() error {
-	err := gw.loadRDBs()
+	err := gw.Reload(gw.rdbConf)
 	if err != nil {
 		return err
 	}
@@ -163,4 +136,85 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 	}
 
 	c.String(200, "OK")
+}
+
+func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
+	// 构建新配置的 ID 集合
+	newIDs := make(map[string]common.RDBConfig)
+	for _, conf := range newConf {
+		newIDs[conf.ID] = conf
+	}
+
+	// 构建旧配置的 ID 集合
+	oldIDs := make(map[string]bool)
+	for _, conf := range gw.rdbConf {
+		oldIDs[conf.ID] = true
+	}
+
+	// 创建新的 RDB map
+	newRDBMap := make(map[string]common.RDB)
+
+	// 1. 保留未变化的 RDB
+	for id, rdb := range gw.rdbMap {
+		if newConf, exists := newIDs[id]; exists {
+			// 检查配置是否变化
+			oldConf := gw.findConfigByID(id)
+			if oldConf != nil && oldConf.URL == newConf.URL {
+				// 配置未变化，保留
+				newRDBMap[id] = rdb
+				common.Logger.Infof("RDB %s unchanged, keeping connection", id)
+				delete(newIDs, id)
+				continue
+			}
+		}
+		// 配置变化或被删除，关闭旧连接
+		if err := rdb.Close(); err != nil {
+			common.Logger.Warnf("Failed to close RDB %s: %v", id, err)
+		}
+		common.Logger.Infof("Closed RDB %s", id)
+	}
+
+	// 2. 加载新增或变化的 RDB
+	for id, conf := range newIDs {
+		parsed, err := ParseRDBURL(conf.URL)
+		if err != nil {
+			common.Logger.Errorf("Failed to parse RDB URL for %s: %v", id, err)
+			return err
+		}
+
+		var rdb common.RDB
+		switch parsed.Type {
+		case "postgres":
+			rdb = NewPsqlRDB(parsed.Host, parsed.Port, parsed.User, parsed.Password, parsed.DBName)
+		case "sqlite":
+			rdb = NewSqliteRDB(parsed.Path)
+		default:
+			common.Logger.Errorf("Unsupported RDB type: %s", parsed.Type)
+			return err
+		}
+
+		if err = rdb.Start(); err != nil {
+			common.Logger.Errorf("Failed to start RDB %s: %v", id, err)
+			return err
+		}
+
+		newRDBMap[id] = rdb
+		common.Logger.Infof("Loaded %s RDB: %s", parsed.Type, id)
+	}
+
+	// 3. 更新配置和 map
+	gw.rdbMap = newRDBMap
+	gw.rdbConf = newConf
+
+	return nil
+}
+
+// findConfigByID 查找配置
+func (gw *RDBGateway) findConfigByID(id string) *common.RDBConfig {
+	for _, conf := range gw.rdbConf {
+		if conf.ID == id {
+			return &conf
+		}
+	}
+	return nil
 }

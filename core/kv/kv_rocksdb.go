@@ -65,6 +65,22 @@ func (r *RocksDBKV) Start() error {
 	return nil
 }
 
+func (r *RocksDBKV) Close() error {
+	if r.db != nil {
+		r.db.Close()
+	}
+	if r.opts != nil {
+		r.opts.Destroy()
+	}
+	if r.ro != nil {
+		r.ro.Destroy()
+	}
+	if r.wo != nil {
+		r.wo.Destroy()
+	}
+	return nil
+}
+
 // Type returns the KV store type
 func (r *RocksDBKV) Type() string {
 	return "rocksdb"

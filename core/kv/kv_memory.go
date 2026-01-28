@@ -56,6 +56,11 @@ func (m *MemoryKV) Start() error {
 	return nil
 }
 
+func (m *MemoryKV) Close() error {
+	// No resources to clean up for in-memory store
+	return nil
+}
+
 // Type returns the KV store type
 func (m *MemoryKV) Type() string {
 	return "memory"

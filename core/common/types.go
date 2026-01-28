@@ -2,6 +2,7 @@ package combinator
 
 type Service interface {
 	Start() error
+	Close() error
 	Type() string
 }
 
