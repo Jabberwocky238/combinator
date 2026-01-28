@@ -292,23 +292,18 @@ spec:
   type: ClusterIP
 
 ---
-# Combinator Ingress (可选)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# Combinator IngressRoute
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
 metadata:
   name: combinator
   namespace: combinator
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
-  rules:
-  - host: combinator.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: combinator
-            port:
-              number: 8899
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`combinator.app238.com`)
+      kind: Rule
+      services:
+        - name: combinator
+          port: 8899
