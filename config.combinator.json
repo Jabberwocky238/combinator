@@ -7,7 +7,7 @@
     },
     {
       "id": "1",
-      "enabled": false,
+      "enabled": true,
       "url": "postgres://combine1:combine1@localhost:5432/combine1db"
     }
   ],

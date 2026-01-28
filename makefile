@@ -11,3 +11,6 @@ build:
 
 test-migrate:
 	go run -tags=$(BUILD_TAGS) ./cmd run migrate -i 0 -d ./tests/migrations
+
+test-migrate-psql:
+	go run -tags=$(BUILD_TAGS) ./cmd run migrate -i 1 -d ./tests/migrations

@@ -7,9 +7,9 @@ type Service interface {
 
 type RDB interface {
 	Service
-	Batch(stmts []string) error
 	Query(stmt string, args ...any) (data []byte, err error)
-	Execute(stmt string, args ...any) (rowsAffected int, err error)
+	Exec(stmt string, args ...any) error
+	Batch(stmt []string, args [][]any) error
 }
 
 type KV interface {

@@ -56,7 +56,7 @@ func (gw *RDBGateway) Start() error {
 	}
 
 	// RDB 路由组
-	gw.grg.Use(middlewareRDB())
+	gw.grg.Use(gw.middlewareRDB())
 	{
 		gw.grg.POST("/query", gw.handleQuery)
 		gw.grg.POST("/exec", gw.handleExec)
@@ -66,11 +66,16 @@ func (gw *RDBGateway) Start() error {
 	return nil
 }
 
-func middlewareRDB() gin.HandlerFunc {
+func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rdbID := c.GetHeader("X-Combinator-RDB-ID")
 		if rdbID == "" {
 			c.JSON(400, gin.H{"error": "missing X-Combinator-RDB-ID header"})
+			c.Abort()
+			return
+		}
+		if gw.rdbMap[rdbID] == nil {
+			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
 		}
@@ -88,10 +93,6 @@ type RDBQueryRequest struct {
 
 func (gw *RDBGateway) handleQuery(c *gin.Context) {
 	rdb := gw.rdbMap[c.GetString("rdb_id")]
-	if rdb == nil {
-		c.JSON(400, gin.H{"error": "invalid RDB ID"})
-		return
-	}
 
 	// 解析请求体
 	var req RDBQueryRequest
@@ -116,16 +117,8 @@ type RDBExecRequest struct {
 	Args []any  `json:"args"`
 }
 
-type RDBExecResponse struct {
-	RowsAffected int `json:"rows_affected"`
-}
-
 func (gw *RDBGateway) handleExec(c *gin.Context) {
 	rdb := gw.rdbMap[c.GetString("rdb_id")]
-	if rdb == nil {
-		c.JSON(400, gin.H{"error": "invalid RDB ID"})
-		return
-	}
 
 	var req RDBExecRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -133,35 +126,36 @@ func (gw *RDBGateway) handleExec(c *gin.Context) {
 		return
 	}
 
-	rowsAffected, err := rdb.Execute(req.Stmt, req.Args...)
+	err := rdb.Exec(req.Stmt, req.Args...)
 	if err != nil {
 		common.Logger.Errorf("Execute failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	var resp RDBExecResponse
-	resp.RowsAffected = rowsAffected
-
-	c.JSON(200, resp)
+	c.String(200, "OK")
 }
+
+type RDBBatchRequest []RDBExecRequest
 
 func (gw *RDBGateway) handleBatch(c *gin.Context) {
 	rdb := gw.rdbMap[c.GetString("rdb_id")]
-	if rdb == nil {
-		c.JSON(400, gin.H{"error": "invalid RDB ID"})
-		return
-	}
 
 	// 直接解析 JSON 数组
-	var stmtList []string
-	if err := c.ShouldBindJSON(&stmtList); err != nil {
+	var reqBody RDBBatchRequest
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	common.Logger.Debugf("Executing batch of %d statements", len(stmtList))
-	err := rdb.Batch(stmtList)
+	common.Logger.Debugf("Executing batch of %d statements", len(reqBody))
+	var stmts []string
+	var args [][]any
+	for _, req := range reqBody {
+		stmts = append(stmts, req.Stmt)
+		args = append(args, req.Args)
+	}
+	err := rdb.Batch(stmts, args)
 	if err != nil {
 		common.Logger.Errorf("Batch execution failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})

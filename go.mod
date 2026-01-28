@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/jabberwocky238/sqlparser v0.0.3
+	github.com/jabberwocky238/sqlparser v0.0.4
 	github.com/lib/pq v1.10.9
 	github.com/linxGnu/grocksdb v1.10.4
 	github.com/mattn/go-sqlite3 v1.14.33

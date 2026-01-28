@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 
+	rdbModule "jabberwocky238/combinator/core/rdb"
+
 	"github.com/spf13/cobra"
 )
 
@@ -163,23 +165,26 @@ func recordMigration(name string) error {
 func executeSQL(sql string) error {
 	url := fmt.Sprintf("http://%s/rdb/batch", apiAddr)
 	// split statements by semicolon
-	var stmtsList []string
+	var reqBody rdbModule.RDBBatchRequest
 	statements := strings.Split(sql, ";")
 	for _, stmt := range statements {
 		trimmed := strings.TrimSpace(stmt)
 		if trimmed != "" {
-			stmtsList = append(stmtsList, trimmed+";")
+			reqBody = append(reqBody, rdbModule.RDBExecRequest{
+				Stmt: trimmed + ";",
+				Args: []any{},
+			})
 		}
 	}
-	reqBody, err := json.Marshal(stmtsList)
+	reqBodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Combinator-RDB-ID", migrateRdbIndex)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -197,14 +202,9 @@ func executeSQL(sql string) error {
 
 func querySQL(sql string) (string, error) {
 	url := fmt.Sprintf("http://%s/rdb/query", apiAddr)
-	type QueryRequest struct {
-		SQL  string `json:"stmt"`
-		Args []any  `json:"args"`
-	}
-
 	var reqBody bytes.Buffer
-	err := json.NewEncoder(&reqBody).Encode(QueryRequest{
-		SQL:  sql,
+	err := json.NewEncoder(&reqBody).Encode(rdbModule.RDBQueryRequest{
+		Stmt: sql,
 		Args: []any{},
 	})
 	if err != nil {

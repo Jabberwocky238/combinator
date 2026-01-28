@@ -2,17 +2,17 @@ package rdb
 
 import (
 	"database/sql"
-	"encoding/csv"
 	"fmt"
 	"strings"
-
-	"bytes"
 
 	_ "github.com/lib/pq"
 )
 
+var ebpg = EB.With("postgres")
+
 type PsqlRDB struct {
 	db       *sql.DB
+	core     *RDBCore
 	host     string
 	port     int
 	user     string
@@ -32,29 +32,25 @@ func NewPsqlRDB(host string, port int, user string, password string, dbname stri
 }
 
 // Execute executes a DML/DDL statement with optional parameters
-func (r *PsqlRDB) Execute(stmt string, args ...any) (rowsAffected int, err error) {
+func (r *PsqlRDB) Exec(stmt string, args ...any) error {
 	// Convert ? placeholders to $1, $2, etc. for PostgreSQL
-	stmt, err = convertPlaceholders(stmt)
+	stmt, err := convertPlaceholders(stmt)
+	log := ebpg.String("Converted statement: %s\n", stmt)
+	fmt.Println(log)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	// Validate parameters
 	if err := validateParamsPsql(stmt, args); err != nil {
-		return 0, err
+		return err
 	}
 
-	result, err := r.db.Exec(stmt, args...)
+	err = r.core.Exec(stmt, args...)
 	if err != nil {
-		return 0, err
+		return err
 	}
-
-	rowsAffected64, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-
-	return int(rowsAffected64), nil
+	return nil
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV
@@ -69,63 +65,38 @@ func (r *PsqlRDB) Query(stmt string, args ...any) ([]byte, error) {
 	if err := validateParamsPsql(stmt, args); err != nil {
 		return nil, err
 	}
-
-	rows, err := r.db.Query(stmt, args...)
+	data, err := r.core.Query(stmt, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-
-	// Use CSV writer
-	writer := csv.NewWriter(&buf)
-
-	// Write column headers
-	if err := writer.Write(columns); err != nil {
-		return nil, err
-	}
-
-	// Write data rows
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, err
-		}
-
-		// Convert to string array
-		record := make([]string, len(columns))
-		for i, val := range values {
-			if val == nil {
-				record[i] = ""
-			} else {
-				record[i] = fmt.Sprintf("%v", val)
-			}
-		}
-
-		if err := writer.Write(record); err != nil {
-			return nil, err
-		}
-	}
-
-	writer.Flush()
-	return buf.Bytes(), writer.Error()
+	return data, nil
 }
 
 // Batch executes multiple SQL statements (text format)
-func (r *PsqlRDB) Batch(stmts []string) error {
-	_, err := exec(r.db, stmts, r.Type())
-	return err
+func (r *PsqlRDB) Batch(stmts []string, args [][]any) error {
+	// Convert ? placeholders to $1, $2, etc. for PostgreSQL
+	for i, stmt := range stmts {
+		convertedStmt, err := convertPlaceholders(stmt)
+		log := ebpg.String("Converted statement: %s\n", convertedStmt)
+		fmt.Println(log)
+		if err != nil {
+			return err
+		}
+		stmts[i] = convertedStmt
+	}
+
+	for i, stmt := range stmts {
+		// Validate parameters
+		if err := validateParamsPsql(stmt, args[i]); err != nil {
+			return err
+		}
+	}
+
+	err := r.core.Batch(stmts, args)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *PsqlRDB) Start() error {
@@ -136,6 +107,10 @@ func (r *PsqlRDB) Start() error {
 		return err
 	}
 	r.db = db
+	r.core = &RDBCore{
+		db:      db,
+		rdbType: r.Type(),
+	}
 	return nil
 }
 
@@ -150,7 +125,7 @@ func convertPlaceholders(stmt string) (string, error) {
 
 	for i := 0; i < len(stmt); i++ {
 		if stmt[i] == '?' {
-			result.WriteString(fmt.Sprintf("$%d", paramIndex))
+			fmt.Fprintf(&result, "$%d", paramIndex)
 			paramIndex++
 		} else {
 			result.WriteByte(stmt[i])
