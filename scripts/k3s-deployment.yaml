@@ -247,7 +247,7 @@ spec:
       containers:
       - name: combinator
         image: ghcr.io/jabberwocky238/combinator:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8899
         args:
