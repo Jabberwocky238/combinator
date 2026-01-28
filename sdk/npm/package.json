@@ -1,6 +1,23 @@
 {
   "name": "combinator-sdk",
   "version": "0.0.1",
+  "description": "TypeScript SDK for Combinator - A unified HTTP API gateway for multiple database backends",
+  "author": "Jabberwocky238 <jabberwocky238@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jabberwocky238/combinator.git",
+    "directory": "sdk/npm"
+  },
+  "keywords": [
+    "combinator",
+    "database",
+    "gateway",
+    "sdk",
+    "typescript",
+    "rdb",
+    "kv"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -8,7 +25,8 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "src"
+    "src",
+    "README.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # 构建二进制文件（只包含 PostgreSQL 支持）
-RUN go build -tags=rdb_psql -o combinator cmd/main.go
+RUN go build -tags=rdb_psql -o combinator ./cmd
 
 # 运行时镜像
 FROM alpine:latest
@@ -31,4 +31,4 @@ EXPOSE 8899
 
 # 启动命令
 ENTRYPOINT ["/app/combinator"]
-CMD ["-c", "/config/config.json", "-l", "0.0.0.0:8899"]
+CMD ["start", "-c", "/config/config.json", "-l", "0.0.0.0:8899"]
