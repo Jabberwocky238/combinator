@@ -296,20 +296,14 @@ spec:
   type: ClusterIP
 
 ---
-# Combinator IngressRoute
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
+# ExternalName Service (在 distributor namespace 代理到 combinator)
+apiVersion: v1
+kind: Service
 metadata:
-  name: combinator
+  name: combinator-proxy
   namespace: distributor
 spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`combinator.app238.com`)
-      kind: Rule
-      services:
-        - name: combinator
-          port: 8899
-  tls:
-    secretName: distributor-tls
+  type: ExternalName
+  externalName: combinator.combinator.svc.cluster.local
+  ports:
+  - port: 8899
