@@ -12,6 +12,9 @@
 curl https://raw.githubusercontent.com/jabberwocky238/combinator/main/scripts/k3s-deployment.yaml -o combinator-k3s-deployment.yaml
 ```
 
+curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 1" -d "{\"stmt\":\"select * from longlivecombinator\",\"args\":[]}"
+curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 0" -d "{\"stmt\":\"select * from longlivecombinator\",\"args\":[]}"
+
 ### 1. 部署
 
 ```bash

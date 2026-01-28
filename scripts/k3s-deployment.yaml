@@ -208,20 +208,24 @@ data:
       "rdb": [
         {
           "id": "0",
+          "enabled": true,
           "url": "sqlite://:memory:"
         },
         {
           "id": "1",
+          "enabled": true,
           "url": "postgres://combine1:combine1@postgres:5432/combine1db"
         }
       ],
       "kv": [
         {
           "id": "0",
+          "enabled": true,
           "url": "memory://"
         },
         {
           "id": "1",
+          "enabled": true,
           "url": "redis://redis:6379/0"
         }
       ]
