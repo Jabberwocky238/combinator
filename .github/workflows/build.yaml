@@ -10,7 +10,22 @@ env:
 
 jobs:
   build-binary:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary_name: combinator
+            artifact_name: combinator-linux-amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary_name: combinator.exe
+            artifact_name: combinator-windows-amd64
+
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout
@@ -21,16 +36,23 @@ jobs:
       with:
         go-version: '1.25'
 
-    - name: Build Binary
+    - name: Build Binary (Linux)
+      if: matrix.os == 'ubuntu-latest'
       run: |
         make build
         ls -lh bin/
 
+    - name: Build Binary (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        go build -o bin/${{ matrix.binary_name }} ./cmd
+        dir bin
+
     - name: Upload Binary
       uses: actions/upload-artifact@v4
       with:
-        name: combinator-exe
-        path: bin/combinator
+        name: ${{ matrix.artifact_name }}
+        path: bin/${{ matrix.binary_name }}
         retention-days: 7
         compression-level: 0
 
@@ -90,17 +112,21 @@ jobs:
             per_page: 100
           });
 
-          const binaryArtifacts = artifacts.data.artifacts
-            .filter(a => a.name === 'combinator-exe')
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          const artifactNames = ['combinator-linux-amd64', 'combinator-windows-amd64'];
 
-          const toDelete = binaryArtifacts.slice(3);
+          for (const name of artifactNames) {
+            const filtered = artifacts.data.artifacts
+              .filter(a => a.name === name)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-          for (const artifact of toDelete) {
-            console.log(`Deleting artifact: ${artifact.name} (${artifact.created_at})`);
-            await github.rest.actions.deleteArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: artifact.id
-            });
+            const toDelete = filtered.slice(3);
+
+            for (const artifact of toDelete) {
+              console.log(`Deleting artifact: ${artifact.name} (${artifact.created_at})`);
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id
+              });
+            }
           }
