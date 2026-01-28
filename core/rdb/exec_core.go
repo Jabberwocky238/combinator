@@ -54,7 +54,7 @@ func parseStatements(statements []string) []sqlparser.Statement {
 		default:
 			sqlType = "OTHER"
 		}
-		fmt.Printf("[INFO] Statement %d: %s - %s\n", i+1, sqlType, truncateSQL(stmt, 50))
+		fmt.Printf("[INFO] Statement %d: %s - %s\n", i+1, sqlType, stmt)
 
 		nodes = append(nodes, node)
 	}
@@ -97,11 +97,15 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, rdbType strin
 			// DML: 修改，输出 JSON（rows_affected, last_insert_id）
 			stmt := node.String()
 			err = executeExecToWriter(tx, stmt, &output)
-		case *sqlparser.CreateTable, *sqlparser.AlterTable, *sqlparser.DropTable:
+		case *sqlparser.CreateTable,
+			*sqlparser.AlterTable,
+			*sqlparser.DropTable,
+			*sqlparser.CreateIndex,
+			*sqlparser.DropIndex:
 			// DDL: 定义，传入 node 和 rdbType
 			err = executeDDLToWriter(tx, node, rdbType, &output)
 		default:
-			err = fmt.Errorf("unknown SQL type")
+			err = fmt.Errorf("unknown SQL type: %T", node)
 		}
 
 		// 如果出错，回滚事务

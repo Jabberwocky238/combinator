@@ -1,19 +1,19 @@
 {
   "rdb": [
     {
-      "id": "1",
+      "id": "0",
       "enabled": true,
       "url": "sqlite://:memory:"
     },
     {
-      "id": "2",
+      "id": "1",
       "enabled": false,
       "url": "postgres://combine1:combine1@localhost:5432/combine1db"
     }
   ],
   "kv": [
     {
-      "id": "1",
+      "id": "0",
       "enabled": true,
       "url": "memory://"
     }

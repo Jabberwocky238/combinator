@@ -12,6 +12,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var eb = EB.With("sqlite")
+
 type SqliteRDB struct {
 	db  *sql.DB
 	url string
@@ -101,6 +103,7 @@ func (r *SqliteRDB) Batch(stmts []string) error {
 	_, err := exec(r.db, stmts, r.Type())
 	if err != nil {
 		common.Logger.Errorf("Batch execution error: %v", err)
+		return eb.Error("Batch execution error: %v", err)
 	}
 	return err
 }

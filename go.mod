@@ -13,6 +13,8 @@ require (
 	github.com/spf13/cobra v1.10.2
 )
 
+replace github.com/jabberwocky238/sqlparser => ../sqlparser
+
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect

@@ -6,6 +6,8 @@ import (
 	common "jabberwocky238/combinator/core/common"
 )
 
+var EB = common.GlobalErrorBuilder.With("rdb")
+
 type RDBGateway struct {
 	grg     *gin.RouterGroup
 	rdbConf []common.RDBConfig
@@ -158,6 +160,7 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 		return
 	}
 
+	common.Logger.Debugf("Executing batch of %d statements", len(stmtList))
 	err := rdb.Batch(stmtList)
 	if err != nil {
 		common.Logger.Errorf("Batch execution failed: %v", err)

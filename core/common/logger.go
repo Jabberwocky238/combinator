@@ -1,13 +1,47 @@
 package combinator
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
 
 // Logger is the global logger instance
 var Logger *logrus.Logger
+var GlobalErrorBuilder = NewErrorBuilder()
+
+type ErrorBuilder struct {
+	Namespaces []string
+}
+
+func NewErrorBuilder() *ErrorBuilder {
+	return &ErrorBuilder{
+		Namespaces: []string{},
+	}
+}
+
+func (eb *ErrorBuilder) With(ns string) *ErrorBuilder {
+	ebnew := &ErrorBuilder{
+		Namespaces: make([]string, len(eb.Namespaces)),
+	}
+	copy(ebnew.Namespaces, eb.Namespaces)
+	ebnew.Namespaces = append(ebnew.Namespaces, ns)
+	return ebnew
+}
+
+func (eb *ErrorBuilder) String(msg string, args ...any) string {
+	if len(eb.Namespaces) == 0 {
+		return msg
+	}
+	ns := strings.Join(eb.Namespaces, ".")
+	return fmt.Sprintf("[%s] %s", ns, fmt.Sprintf(msg, args...))
+}
+
+func (eb *ErrorBuilder) Error(msg string, args ...any) error {
+	return fmt.Errorf("%s", eb.String(msg, args...))
+}
 
 func init() {
 	Logger = logrus.New()
