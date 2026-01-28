@@ -1,4 +1,4 @@
-import requests
+import requests # type: ignore
 
 headers = {
     "X-Combinator-RDB-ID": "1"

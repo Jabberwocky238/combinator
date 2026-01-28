@@ -3,7 +3,6 @@ import type {
   RDBQueryResult,
   RDBOptions,
   KVOptions,
-  RDBExecResult,
 } from './types'
 
 export class Combinator {
@@ -95,7 +94,7 @@ export class RDB {
     )
   }
 
-  async exec(statement: string, params?: any[]): Promise<RDBExecResult> {
+  async exec(statement: string, params?: any[]): Promise<void> {
     const res = await this.combinator.request(
       'POST',
       '/rdb/exec',
@@ -105,16 +104,14 @@ export class RDB {
     if (!res.ok) {
       throw new Error(`RDB exec failed with status ${res.status}`)
     }
-    const data = await res.json()
-    return data
   }
 
-  async batch(statements: string[]): Promise<void> {
+  async batch(statements: string[], paramsArray: any[][] = []): Promise<void> {
     const res = await this.combinator.request(
       'POST',
       '/rdb/batch',
       { 'X-Combinator-RDB-ID': this.options.instanceId },
-      JSON.stringify(statements)
+      JSON.stringify([...statements.map((stmt, index) => ({ stmt, args: paramsArray[index] || [] }))])
     )
     if (!res.ok) {
       throw new Error(`RDB batch failed with status ${res.status}`)

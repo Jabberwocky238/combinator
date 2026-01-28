@@ -1,6 +1,6 @@
 {
   "name": "combinator-sdk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "TypeScript SDK for Combinator - A unified HTTP API gateway for multiple database backends",
   "author": "Jabberwocky238 <jabberwocky238@gmail.com>",
   "license": "MIT",

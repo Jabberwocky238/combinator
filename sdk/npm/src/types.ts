@@ -16,29 +16,9 @@ export type RDBQueryResult<Item> = {
   rows: Item[]
 }
 
-export interface RDBExecOptions {
-  sql: string
-  params?: any[]
-}
-
-export interface RDBExecResult {
-  rows_affected: number
-}
-
-export interface RDBBatchOptions {
-  sqls: string[]
-}
-
 export interface KVOptions {
   instanceId: string
 }
 
-export interface KVGetOptions {
-  key: string
-}
 
-export interface KVSetOptions {
-  key: string
-  value: string
-}
 
