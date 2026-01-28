@@ -301,10 +301,10 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: combinator
-  namespace: combinator
+  namespace: distributor
 spec:
   entryPoints:
-    - web
+    - websecure
   routes:
     - match: Host(`combinator.app238.com`)
       kind: Rule
