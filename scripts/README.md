@@ -15,6 +15,13 @@ curl https://raw.githubusercontent.com/jabberwocky238/combinator/main/scripts/k3
 curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 1" -d "{\"stmt\":\"select * from longlivecombinator\",\"args\":[]}"
 curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 0" -d "{\"stmt\":\"select * from longlivecombinator\",\"args\":[]}"
 
+
+curl -X POST "http://combinator.app238.com/rdb/exec" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 1" -d "{\"stmt\":\"CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, name TEXT);\",\"args\":[]}"
+
+curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 1" -d "{\"stmt\":\"SELECT * FROM test;\",\"args\":[]}"
+
+kubectl logs exhibitor-distributoradmin-69d9bc6c4-krg2j -n worker -f
+
 ### 1. 部署
 
 ```bash

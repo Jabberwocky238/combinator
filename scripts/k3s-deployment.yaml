@@ -311,3 +311,5 @@ spec:
       services:
         - name: combinator
           port: 8899
+  tls:
+    secretName: distributor-tls

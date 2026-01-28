@@ -2,6 +2,7 @@ package combinator
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -24,7 +25,11 @@ func NewGateway(confIn *common.Config) *Gateway {
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
-
+	r.GET("/", func(c *gin.Context) {
+		// text and timestamp
+		timestamp := time.Now().Format(time.RFC3339)
+		c.String(http.StatusOK, "Combinator Service is running at %s.", timestamp)
+	})
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
