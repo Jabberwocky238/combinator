@@ -19,6 +19,7 @@ func main() {
 	// 显式注册所有命令
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
 	runCmd.AddCommand(migrateCmd)
 
