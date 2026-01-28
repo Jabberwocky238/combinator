@@ -28,7 +28,7 @@ var startCmd = &cobra.Command{
 }
 
 func init() {
-	startCmd.Flags().StringVarP(&configPath, "config", "c", "config.json", "配置文件路径")
+	startCmd.Flags().StringVarP(&configPath, "config", "c", "config.combinator.json", "配置文件路径")
 	startCmd.Flags().StringVarP(&listenAddr, "listen", "l", "localhost:8899", "监听地址")
 }
 
