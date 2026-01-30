@@ -94,12 +94,12 @@ export class RDB {
     )
   }
 
-  async exec(statement: string, params?: any[]): Promise<void> {
+  async exec(statement: string, params: any[] = []): Promise<void> {
     const res = await this.combinator.request(
       'POST',
       '/rdb/exec',
       { 'X-Combinator-RDB-ID': this.options.instanceId },
-      JSON.stringify({ stmt: statement, args: params || [] })
+      JSON.stringify({ stmt: statement, args: params })
     )
     if (!res.ok) {
       throw new Error(`RDB exec failed with status ${res.status}`)
