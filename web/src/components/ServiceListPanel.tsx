@@ -1,11 +1,34 @@
+import { useState } from 'react'
 import { useCombinator } from '../context/CombinatorContext'
 import { useServiceList, type ServiceInfo } from '../hooks/useServiceList'
+import { RDBDetailPanel } from './RDBDetailPanel'
+
+interface SelectedService {
+  id: string
+  type: string
+  category: 'rdb' | 'kv'
+}
 
 export function ServiceListPanel() {
   const { isConnected } = useCombinator()
   const { services, loading, error, refresh } = useServiceList()
+  const [selected, setSelected] = useState<SelectedService | null>(null)
 
   if (!isConnected) return null
+
+  if (selected?.category === 'rdb') {
+    return (
+      <RDBDetailPanel
+        serviceId={selected.id}
+        serviceType={selected.type}
+        onBack={() => setSelected(null)}
+      />
+    )
+  }
+
+  const handleSelect = (item: ServiceInfo, category: 'rdb' | 'kv') => {
+    setSelected({ id: item.id, type: item.type, category })
+  }
 
   return (
     <div className="p-6">
@@ -28,17 +51,18 @@ export function ServiceListPanel() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ServiceSection title="RDB Instances" items={services.rdb} icon={<DatabaseIcon />} />
-        <ServiceSection title="KV Instances" items={services.kv} icon={<KeyIcon />} />
+        <ServiceSection title="RDB Instances" items={services.rdb} icon={<DatabaseIcon />} onSelect={item => handleSelect(item, 'rdb')} />
+        <ServiceSection title="KV Instances" items={services.kv} icon={<KeyIcon />} onSelect={item => handleSelect(item, 'kv')} />
       </div>
     </div>
   )
 }
 
-function ServiceSection({ title, items, icon }: {
+function ServiceSection({ title, items, icon, onSelect }: {
   title: string
   items: ServiceInfo[]
   icon: React.ReactNode
+  onSelect: (item: ServiceInfo) => void
 }) {
   return (
     <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
@@ -53,7 +77,11 @@ function ServiceSection({ title, items, icon }: {
       ) : (
         <ul className="space-y-2">
           {items.map(item => (
-            <li key={item.id} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded">
+            <li
+              key={item.id}
+              onClick={() => onSelect(item)}
+              className="flex items-center justify-between p-2 bg-zinc-900/50 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
+            >
               <span className="text-white font-mono text-sm">{item.id}</span>
               <span className="text-zinc-500 text-xs uppercase">{item.type}</span>
             </li>
