@@ -6,7 +6,7 @@ import (
 	common "jabberwocky238/combinator/core/common"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var ebsqlite = EB.With("sqlite")
@@ -64,7 +64,7 @@ func (r *SqliteRDB) Batch(stmts []string, args [][]any) error {
 }
 
 func (r *SqliteRDB) Start() error {
-	sqlite_db, err := sql.Open("sqlite3", r.url)
+	sqlite_db, err := sql.Open("sqlite", r.url)
 	if err != nil {
 		return err
 	}

@@ -10,20 +10,20 @@ var EB = common.GlobalErrorBuilder.With("rdb")
 
 type RDBGateway struct {
 	grg     *gin.RouterGroup
-	rdbConf []common.RDBConfig
-	rdbMap  map[string]common.RDB
+	RdbConf []common.RDBConfig
+	RdbMap  map[string]common.RDB
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 	return &RDBGateway{
 		grg:     grg,
-		rdbConf: conf,
-		rdbMap:  make(map[string]common.RDB),
+		RdbConf: conf,
+		RdbMap:  make(map[string]common.RDB),
 	}
 }
 
 func (gw *RDBGateway) Start() error {
-	err := gw.Reload(gw.rdbConf)
+	err := gw.Reload(gw.RdbConf)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if gw.rdbMap[rdbID] == nil {
+		if gw.RdbMap[rdbID] == nil {
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
@@ -65,7 +65,7 @@ type RDBQueryRequest struct {
 }
 
 func (gw *RDBGateway) handleQuery(c *gin.Context) {
-	rdb := gw.rdbMap[c.GetString("rdb_id")]
+	rdb := gw.RdbMap[c.GetString("rdb_id")]
 
 	// 解析请求体
 	var req RDBQueryRequest
@@ -91,7 +91,7 @@ type RDBExecRequest struct {
 }
 
 func (gw *RDBGateway) handleExec(c *gin.Context) {
-	rdb := gw.rdbMap[c.GetString("rdb_id")]
+	rdb := gw.RdbMap[c.GetString("rdb_id")]
 
 	var req RDBExecRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -112,7 +112,7 @@ func (gw *RDBGateway) handleExec(c *gin.Context) {
 type RDBBatchRequest []RDBExecRequest
 
 func (gw *RDBGateway) handleBatch(c *gin.Context) {
-	rdb := gw.rdbMap[c.GetString("rdb_id")]
+	rdb := gw.RdbMap[c.GetString("rdb_id")]
 
 	// 直接解析 JSON 数组
 	var reqBody RDBBatchRequest
@@ -147,7 +147,7 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 
 	// 构建旧配置的 ID 集合
 	oldIDs := make(map[string]bool)
-	for _, conf := range gw.rdbConf {
+	for _, conf := range gw.RdbConf {
 		oldIDs[conf.ID] = true
 	}
 
@@ -155,7 +155,7 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 	newRDBMap := make(map[string]common.RDB)
 
 	// 1. 保留未变化的 RDB
-	for id, rdb := range gw.rdbMap {
+	for id, rdb := range gw.RdbMap {
 		if newConf, exists := newIDs[id]; exists {
 			// 检查配置是否变化
 			oldConf := gw.findConfigByID(id)
@@ -203,15 +203,15 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 	}
 
 	// 3. 更新配置和 map
-	gw.rdbMap = newRDBMap
-	gw.rdbConf = newConf
+	gw.RdbMap = newRDBMap
+	gw.RdbConf = newConf
 
 	return nil
 }
 
 // findConfigByID 查找配置
 func (gw *RDBGateway) findConfigByID(id string) *common.RDBConfig {
-	for _, conf := range gw.rdbConf {
+	for _, conf := range gw.RdbConf {
 		if conf.ID == id {
 			return &conf
 		}

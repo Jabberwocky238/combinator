@@ -20,7 +20,7 @@ type Gateway struct {
 	kvGateway  *kvModule.KVGateway
 }
 
-func NewGateway(confIn *common.Config) *Gateway {
+func NewGateway(confIn *common.Config, cors bool) *Gateway {
 	conf, err := configCheck(confIn)
 	if err != nil {
 		panic(err)
@@ -28,6 +28,9 @@ func NewGateway(confIn *common.Config) *Gateway {
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
+	if cors {
+		openGatewayCors(r)
+	}
 	r.GET("/", func(c *gin.Context) {
 		// text and timestamp
 		timestamp := time.Now().Format(time.RFC3339)
@@ -46,6 +49,20 @@ func NewGateway(confIn *common.Config) *Gateway {
 		rdbGateway: rdbModule.NewGateway(r.Group("/rdb"), conf.Rdb),
 		kvGateway:  kvModule.NewGateway(r.Group("/kv"), conf.Kv),
 	}
+}
+
+func openGatewayCors(r *gin.Engine) {
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+	})
+
+	// options
+	r.OPTIONS("/*cors", func(c *gin.Context) {
+		c.AbortWithStatus(204)
+	})
 }
 
 func configCheck(confs *common.Config) (common.Config, error) {

@@ -86,7 +86,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	gateway := combinator.NewGateway(config)
+	gateway := combinator.NewGateway(config, false)
 
 	// 配置重载通道
 	reloadChan := make(chan *common.Config, 1)

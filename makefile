@@ -2,7 +2,7 @@ BUILD_TAGS=rdb_psql
 # BUILD_TAGS=kv_rocksdb,rdb_psql
 
 dev:
-	go run -tags=$(BUILD_TAGS) ./cmd start
+	go run -tags=$(BUILD_TAGS) ./cmd dev
 
 build:
 	go build -tags=$(BUILD_TAGS) -o bin/combinator ./cmd

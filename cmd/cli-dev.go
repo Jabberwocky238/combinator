@@ -11,6 +11,7 @@ import (
 	combinator "jabberwocky238/combinator/core"
 	common "jabberwocky238/combinator/core/common"
 
+	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 )
 
@@ -58,7 +59,8 @@ func runDev(cmd *cobra.Command, args []string) {
 	}
 
 	// 启动网关
-	gateway := combinator.NewGateway(&config)
+	gateway := combinator.NewGateway(&config, true)
+	gateway.SetupMonitorAPI()
 
 	// 启动信号监听
 	sigChan := make(chan os.Signal, 1)
@@ -78,3 +80,11 @@ func runDev(cmd *cobra.Command, args []string) {
 	fmt.Println("\n✓ Received interrupt signal, shutting down gracefully...")
 }
 
+func cors(r *gin.Engine) {
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+	})
+}

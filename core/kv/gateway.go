@@ -8,20 +8,20 @@ import (
 
 type KVGateway struct {
 	grg    *gin.RouterGroup
-	kvConf []common.KVConfig
-	kvMap  map[string]common.KV
+	KvConf []common.KVConfig
+	KvMap  map[string]common.KV
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.KVConfig) *KVGateway {
 	return &KVGateway{
 		grg:    grg,
-		kvConf: conf,
-		kvMap:  make(map[string]common.KV),
+		KvConf: conf,
+		KvMap:  make(map[string]common.KV),
 	}
 }
 
 func (gw *KVGateway) loadKVs() error {
-	for _, kvConf := range gw.kvConf {
+	for _, kvConf := range gw.KvConf {
 		parsed, err := ParseKVURL(kvConf.URL)
 		if err != nil {
 			common.Logger.Errorf("Failed to parse KV URL for %s: %v", kvConf.ID, err)
@@ -35,7 +35,7 @@ func (gw *KVGateway) loadKVs() error {
 			return err
 		}
 
-		gw.kvMap[kvConf.ID] = kv
+		gw.KvMap[kvConf.ID] = kv
 
 		if err = kv.Start(); err != nil {
 			common.Logger.Errorf("Failed to start KV %s: %v", kvConf.ID, err)
@@ -47,7 +47,7 @@ func (gw *KVGateway) loadKVs() error {
 }
 
 func (gw *KVGateway) Start() error {
-	err := gw.Reload(gw.kvConf)
+	err := gw.Reload(gw.KvConf)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 }
 
 func (gw *KVGateway) handleGet(c *gin.Context) {
-	kv := gw.kvMap[c.GetString("kv_id")]
+	kv := gw.KvMap[c.GetString("kv_id")]
 	if kv == nil {
 		c.JSON(400, gin.H{"error": "invalid KV ID"})
 		return
@@ -104,7 +104,7 @@ func (gw *KVGateway) handleGet(c *gin.Context) {
 }
 
 func (gw *KVGateway) handleSet(c *gin.Context) {
-	kv := gw.kvMap[c.GetString("kv_id")]
+	kv := gw.KvMap[c.GetString("kv_id")]
 	if kv == nil {
 		c.JSON(400, gin.H{"error": "invalid KV ID"})
 		return
@@ -139,7 +139,7 @@ func (gw *KVGateway) Reload(newConf []common.KVConfig) error {
 	newKVMap := make(map[string]common.KV)
 
 	// 1. 保留未变化的 KV
-	for id, kv := range gw.kvMap {
+	for id, kv := range gw.KvMap {
 		if newConf, exists := newIDs[id]; exists {
 			// 检查配置是否变化
 			oldConf := gw.findConfigByID(id)
@@ -182,15 +182,15 @@ func (gw *KVGateway) Reload(newConf []common.KVConfig) error {
 	}
 
 	// 3. 更新配置和 map
-	gw.kvMap = newKVMap
-	gw.kvConf = newConf
+	gw.KvMap = newKVMap
+	gw.KvConf = newConf
 
 	return nil
 }
 
 // findConfigByID 查找配置
 func (gw *KVGateway) findConfigByID(id string) *common.KVConfig {
-	for _, conf := range gw.kvConf {
+	for _, conf := range gw.KvConf {
 		if conf.ID == id {
 			return &conf
 		}
