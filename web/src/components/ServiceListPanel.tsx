@@ -1,34 +1,13 @@
-import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useCombinator } from '../context/CombinatorContext'
 import { useServiceList, type ServiceInfo } from '../hooks/useServiceList'
-import { RDBDetailPanel } from './RDBDetailPanel'
-
-interface SelectedService {
-  id: string
-  type: string
-  category: 'rdb' | 'kv'
-}
 
 export function ServiceListPanel() {
+  const navigate = useNavigate()
   const { isConnected } = useCombinator()
   const { services, loading, error, refresh } = useServiceList()
-  const [selected, setSelected] = useState<SelectedService | null>(null)
 
   if (!isConnected) return null
-
-  if (selected?.category === 'rdb') {
-    return (
-      <RDBDetailPanel
-        serviceId={selected.id}
-        serviceType={selected.type}
-        onBack={() => setSelected(null)}
-      />
-    )
-  }
-
-  const handleSelect = (item: ServiceInfo, category: 'rdb' | 'kv') => {
-    setSelected({ id: item.id, type: item.type, category })
-  }
 
   return (
     <div className="p-6">
@@ -51,8 +30,8 @@ export function ServiceListPanel() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ServiceSection title="RDB Instances" items={services.rdb} icon={<DatabaseIcon />} onSelect={item => handleSelect(item, 'rdb')} />
-        <ServiceSection title="KV Instances" items={services.kv} icon={<KeyIcon />} onSelect={item => handleSelect(item, 'kv')} />
+        <ServiceSection title="RDB Instances" items={services.rdb} icon={<DatabaseIcon />} onSelect={id => navigate(`/rdb/${id}`)} />
+        <ServiceSection title="KV Instances" items={services.kv} icon={<KeyIcon />} onSelect={id => navigate(`/kv/${id}`)} />
       </div>
     </div>
   )
@@ -62,7 +41,7 @@ function ServiceSection({ title, items, icon, onSelect }: {
   title: string
   items: ServiceInfo[]
   icon: React.ReactNode
-  onSelect: (item: ServiceInfo) => void
+  onSelect: (id: string) => void
 }) {
   return (
     <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
@@ -79,7 +58,7 @@ function ServiceSection({ title, items, icon, onSelect }: {
           {items.map(item => (
             <li
               key={item.id}
-              onClick={() => onSelect(item)}
+              onClick={() => onSelect(item.id)}
               className="flex items-center justify-between p-2 bg-zinc-900/50 rounded cursor-pointer hover:bg-zinc-700 transition-colors"
             >
               <span className="text-white font-mono text-sm">{item.id}</span>
