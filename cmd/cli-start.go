@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -34,6 +35,8 @@ func init() {
 	startCmd.Flags().IntVar(&watchInterval, "watch-interval", 5, "文件监听间隔（秒）")
 }
 
+var lastHash [32]byte
+
 // 加载配置文件
 func loadConfig(path string) (*common.Config, error) {
 	configJSON, err := os.ReadFile(path)
@@ -41,6 +44,7 @@ func loadConfig(path string) (*common.Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	lastHash = sha256.Sum256(configJSON)
 	var config common.Config
 	if err := json.Unmarshal(configJSON, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
@@ -51,29 +55,30 @@ func loadConfig(path string) (*common.Config, error) {
 
 // 文件监听
 func watchConfigFile(path string, interval int, reloadChan chan<- *common.Config) {
-	var lastModTime time.Time
-
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		info, err := os.Stat(path)
+		// 直接读文件内容以避免某些文件系统不更新修改时间的问题
+		content, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Printf("⚠️  Failed to stat config file: %v\n", err)
+			fmt.Printf("⚠️  Failed to read config file: %v\n", err)
 			continue
 		}
 
-		if info.ModTime().After(lastModTime) {
-			lastModTime = info.ModTime()
+		// 使用crypto/sha256计算文件内容哈希
+		currentHash := sha256.Sum256(content)
+		if currentHash == lastHash {
+			continue // 文件内容未变更
+		} else {
 			fmt.Println("📝 Config file changed, reloading...")
-
 			config, err := loadConfig(path)
 			if err != nil {
 				fmt.Printf("❌ Failed to reload config: %v\n", err)
 				continue
 			}
-
 			reloadChan <- config
+			lastHash = currentHash
 		}
 	}
 }
