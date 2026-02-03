@@ -41,7 +41,7 @@ var migrateRdbCmd = &cobra.Command{
 func init() {
 	migrateRdbCmd.Flags().StringVar(&migrationDir, "migration-dir", "./migrations", "migrations 文件夹路径")
 	migrateRdbCmd.Flags().StringVar(&apiAddr, "api", "", "Combinator API 服务器地址 (默认从 config.combinator.json 读取)")
-	migrateRdbCmd.Flags().StringVarP(&devPort, "dev", "D", "", "开发模式，使用 http://localhost:<port>")
+	migrateRdbCmd.Flags().StringVarP(&devPort, "dev", "D", "8899", "开发模式，使用 http://localhost:<port>")
 	migrateRdbCmd.Flags().BoolVarP(&prodMode, "prod", "P", false, "生产模式，从配置文件读取 uid")
 	migrateCmd.AddCommand(migrateRdbCmd)
 }
@@ -50,9 +50,9 @@ func runMigrateRdb(cmd *cobra.Command, args []string) {
 	migrateRdbIndex = args[0]
 
 	// 处理 API 地址
-	if devPort != "" {
-		apiAddr = fmt.Sprintf("http://localhost:%s", devPort)
-	} else if prodMode || apiAddr == "" {
+	if apiAddr != "" {
+		apiAddr = normalizeAPIAddr(apiAddr)
+	} else if prodMode {
 		// 从配置文件读取
 		config, err := loadConfig()
 		if err != nil {
@@ -64,8 +64,11 @@ func runMigrateRdb(cmd *cobra.Command, args []string) {
 			return
 		}
 		apiAddr = fmt.Sprintf("https://%s.combinator.app238.com", config.Metadata.UID)
+	} else if devPort != "" {
+		apiAddr = fmt.Sprintf("http://localhost:%s", devPort)
 	} else {
-		apiAddr = normalizeAPIAddr(apiAddr)
+		fmt.Println("请使用 --api 参数指定 API 地址，或启用开发模式 (--dev/-D) 或生产模式 (--prod/-P)")
+		return
 	}
 
 	fmt.Printf("RDB 实例 ID: %s\n", migrateRdbIndex)
