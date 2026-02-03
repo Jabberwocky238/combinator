@@ -14,6 +14,9 @@ var (
 )
 
 var defaultConfig = map[string]any{
+	"metadata": map[string]any{
+		"uid": "xxxx",
+	},
 	"rdb": []map[string]any{
 		{
 			"id":      "0",

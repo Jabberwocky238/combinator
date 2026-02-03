@@ -1,8 +1,13 @@
 package combinator
 
 type Config struct {
-	Rdb []RDBConfig `json:"rdb"`
-	Kv  []KVConfig  `json:"kv"`
+	Metadata MetadataConfig `json:"metadata"`
+	Rdb      []RDBConfig    `json:"rdb"`
+	Kv       []KVConfig     `json:"kv"`
+}
+
+type MetadataConfig struct {
+	UID string `json:"uid"`
 }
 
 type RDBConfig struct {

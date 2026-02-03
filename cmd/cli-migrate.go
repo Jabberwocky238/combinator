@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	combinator "jabberwocky238/combinator/core/common"
 	rdbModule "jabberwocky238/combinator/core/rdb"
 
 	"github.com/spf13/cobra"
@@ -21,30 +22,65 @@ var (
 	migrateRdbIndex string
 	migrationDir    string
 	apiAddr         string
+	devPort         string
+	prodMode        bool
 )
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "执行数据库迁移",
-	Run:   runMigrate,
+}
+
+var migrateRdbCmd = &cobra.Command{
+	Use:   "rdb <rdb_id>",
+	Short: "执行 RDB 数据库迁移",
+	Args:  cobra.ExactArgs(1),
+	Run:   runMigrateRdb,
 }
 
 func init() {
-	migrateCmd.Flags().StringVarP(&migrateRdbIndex, "index", "i", "", "RDB 实例 ID (必填)")
-	migrateCmd.Flags().StringVarP(&migrationDir, "migration-dir", "d", "./migrations", "migrations 文件夹路径")
-	migrateCmd.Flags().StringVar(&apiAddr, "api", "localhost:8899", "Combinator API 服务器地址")
-	migrateCmd.MarkFlagRequired("index")
+	migrateRdbCmd.Flags().StringVar(&migrationDir, "migration-dir", "./migrations", "migrations 文件夹路径")
+	migrateRdbCmd.Flags().StringVar(&apiAddr, "api", "", "Combinator API 服务器地址 (默认从 config.combinator.json 读取)")
+	migrateRdbCmd.Flags().StringVarP(&devPort, "dev", "D", "", "开发模式，使用 http://localhost:<port>")
+	migrateRdbCmd.Flags().BoolVarP(&prodMode, "prod", "P", false, "生产模式，从配置文件读取 uid")
+	migrateCmd.AddCommand(migrateRdbCmd)
 }
 
-func runMigrate(cmd *cobra.Command, args []string) {
-	if migrateRdbIndex == "" {
-		fmt.Println("必须指定 RDB 实例 ID，使用 -i 或 --index 参数")
-		return
+func runMigrateRdb(cmd *cobra.Command, args []string) {
+	migrateRdbIndex = args[0]
+
+	// 处理 API 地址
+	if devPort != "" {
+		apiAddr = fmt.Sprintf("http://localhost:%s", devPort)
+	} else if prodMode || apiAddr == "" {
+		// 从配置文件读取
+		config, err := loadConfig()
+		if err != nil {
+			fmt.Printf("读取配置文件失败: %v\n", err)
+			return
+		}
+		if config.Metadata.UID == "" {
+			fmt.Println("配置文件中未设置 metadata.uid，请使用 --api 参数指定 API 地址")
+			return
+		}
+		apiAddr = fmt.Sprintf("https://%s.combinator.app238.com", config.Metadata.UID)
+	} else {
+		apiAddr = normalizeAPIAddr(apiAddr)
 	}
 
 	fmt.Printf("RDB 实例 ID: %s\n", migrateRdbIndex)
 	fmt.Printf("Migrations 目录: %s\n", migrationDir)
-	fmt.Printf("API 地址: %s\n\n", apiAddr)
+	fmt.Printf("Combinator 地址: %s\n", apiAddr)
+
+	fmt.Print("确认执行迁移? (y/yes): ")
+	var confirm string
+	fmt.Scanln(&confirm)
+	confirm = strings.ToLower(strings.TrimSpace(confirm))
+	if confirm != "y" && confirm != "yes" {
+		fmt.Println("已取消")
+		return
+	}
+	fmt.Println()
 
 	if err := ensureMigrationTable(); err != nil {
 		fmt.Printf("创建迁移表失败: %v\n", err)
@@ -163,7 +199,7 @@ func recordMigration(name string) error {
 }
 
 func executeSQL(sql string) error {
-	url := fmt.Sprintf("http://%s/rdb/batch", apiAddr)
+	url := fmt.Sprintf("%s/rdb/batch", apiAddr)
 	// split statements by semicolon
 	var reqBody rdbModule.RDBBatchRequest
 	statements := strings.Split(sql, ";")
@@ -201,7 +237,7 @@ func executeSQL(sql string) error {
 }
 
 func querySQL(sql string) (string, error) {
-	url := fmt.Sprintf("http://%s/rdb/query", apiAddr)
+	url := fmt.Sprintf("%s/rdb/query", apiAddr)
 	var reqBody bytes.Buffer
 	err := json.NewEncoder(&reqBody).Encode(rdbModule.RDBQueryRequest{
 		Stmt: sql,
@@ -232,4 +268,23 @@ func querySQL(sql string) (string, error) {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 	return string(body), nil
+}
+
+func loadConfig() (*combinator.Config, error) {
+	data, err := os.ReadFile("config.combinator.json")
+	if err != nil {
+		return nil, err
+	}
+	var config combinator.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func normalizeAPIAddr(addr string) string {
+	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
+		return addr
+	}
+	return "https://" + addr
 }

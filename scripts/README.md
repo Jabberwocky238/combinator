@@ -20,6 +20,9 @@ curl -X POST "http://combinator.app238.com/rdb/exec" -H "Content-Type: applicati
 
 curl -X POST "http://combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: 1" -d "{\"stmt\":\"SELECT * FROM test;\",\"args\":[]}"
 
+curl -X POST "https://jw6268.combinator.app238.com/rdb/query" -H "Content-Type: application/json" -H "X-Combinator-RDB-ID: ce6189b9ad630d7a" -d "{\"stmt\":\"SELECT * FROM test;\",\"args\":[]}"
+
+
 kubectl logs exhibitor-distributoradmin-69d9bc6c4-krg2j -n worker -f
 
 ### 1. 部署

@@ -15,18 +15,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type StartCmd struct{}
+
 var (
-	configPath    string
-	listenAddr    string
-	watchMode     string
-	watchInterval int
-	lastHash      [32]byte
+	configPath       string
+	listenAddr       string
+	watchMode        string
+	watchInterval    int
+	lastHash         [32]byte
+	startCmdInstance StartCmd
 )
 
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "启动 Combinator 网关服务",
-	Run:   runStart,
+	Run:   startCmdInstance.runStart,
 }
 
 func init() {
@@ -37,7 +40,7 @@ func init() {
 }
 
 // 加载配置文件
-func loadConfig(path string) (*common.Config, [32]byte, error) {
+func (s *StartCmd) loadConfig(path string) (*common.Config, [32]byte, error) {
 	configJSON, err := os.ReadFile(path)
 	if err != nil {
 		return nil, [32]byte{}, fmt.Errorf("failed to read config file: %w", err)
@@ -53,13 +56,13 @@ func loadConfig(path string) (*common.Config, [32]byte, error) {
 }
 
 // 文件监听
-func watchConfigFile(path string, interval int, reloadChan chan<- *common.Config) {
+func (s *StartCmd) watchConfigFile(path string, interval int, reloadChan chan<- *common.Config) {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		// 直接读文件内容以避免某些文件系统不更新修改时间的问题
-		config, newHash, err := loadConfig(path)
+		config, newHash, err := s.loadConfig(path)
 		if err != nil {
 			fmt.Printf("⚠️  Failed to read config file: %v\n", err)
 			continue
@@ -74,9 +77,9 @@ func watchConfigFile(path string, interval int, reloadChan chan<- *common.Config
 	}
 }
 
-func runStart(cmd *cobra.Command, args []string) {
+func (s *StartCmd) runStart(cmd *cobra.Command, args []string) {
 	// 加载初始配置
-	config, newHash, err := loadConfig(configPath)
+	config, newHash, err := s.loadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		return
@@ -92,7 +95,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	// 启动 watch 模式
 	if watchMode == "file" || watchMode == "all" {
 		fmt.Printf("📁 File watch enabled (interval: %ds)\n", watchInterval)
-		go watchConfigFile(configPath, watchInterval, reloadChan)
+		go s.watchConfigFile(configPath, watchInterval, reloadChan)
 	}
 
 	if watchMode == "api" || watchMode == "all" {
