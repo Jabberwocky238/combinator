@@ -20,6 +20,7 @@ var (
 	listenAddr    string
 	watchMode     string
 	watchInterval int
+	lastHash      [32]byte
 )
 
 var startCmd = &cobra.Command{
@@ -35,22 +36,20 @@ func init() {
 	startCmd.Flags().IntVar(&watchInterval, "watch-interval", 5, "文件监听间隔（秒）")
 }
 
-var lastHash [32]byte
-
 // 加载配置文件
-func loadConfig(path string) (*common.Config, error) {
+func loadConfig(path string) (*common.Config, [32]byte, error) {
 	configJSON, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, [32]byte{}, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	lastHash = sha256.Sum256(configJSON)
+	newHash := sha256.Sum256(configJSON)
 	var config common.Config
 	if err := json.Unmarshal(configJSON, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, newHash, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	return &config, nil
+	return &config, newHash, nil
 }
 
 // 文件监听
@@ -60,37 +59,31 @@ func watchConfigFile(path string, interval int, reloadChan chan<- *common.Config
 
 	for range ticker.C {
 		// 直接读文件内容以避免某些文件系统不更新修改时间的问题
-		content, err := os.ReadFile(path)
+		config, newHash, err := loadConfig(path)
 		if err != nil {
 			fmt.Printf("⚠️  Failed to read config file: %v\n", err)
 			continue
 		}
 
-		// 使用crypto/sha256计算文件内容哈希
-		currentHash := sha256.Sum256(content)
-		if currentHash == lastHash {
+		if newHash == lastHash {
 			continue // 文件内容未变更
 		} else {
 			fmt.Println("📝 Config file changed, reloading...")
-			config, err := loadConfig(path)
-			if err != nil {
-				fmt.Printf("❌ Failed to reload config: %v\n", err)
-				continue
-			}
 			reloadChan <- config
-			lastHash = currentHash
 		}
 	}
 }
 
 func runStart(cmd *cobra.Command, args []string) {
 	// 加载初始配置
-	config, err := loadConfig(configPath)
+	config, newHash, err := loadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		return
 	}
+	lastHash = newHash
 
+	// 创建并启动 gateway
 	gateway := combinator.NewGateway(config, false)
 
 	// 配置重载通道
@@ -128,6 +121,11 @@ func runStart(cmd *cobra.Command, args []string) {
 			return
 		case newConfig := <-reloadChan:
 			fmt.Println("✅ Reloading gateway with new configuration...")
+			buf, err := json.Marshal(newConfig)
+			if err != nil {
+				fmt.Printf("❌ Failed to print new config: %v\n", err)
+			}
+			lastHash = sha256.Sum256(buf)
 			gateway.Reload(newConfig)
 		}
 	}
