@@ -22,12 +22,11 @@ type Gateway struct {
 }
 
 func NewGateway(confIn *common.Config, cors bool) *Gateway {
-	conf, err := configCheck(confIn)
-	if err != nil {
-		panic(err)
-	}
-
-	r := gin.Default()
+	conf := confIn
+	r := gin.New()
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		SkipPaths: []string{"/health"},
+	}))
 	r.Use(gin.Recovery())
 	if cors {
 		openGatewayCors(r)
@@ -37,7 +36,7 @@ func NewGateway(confIn *common.Config, cors bool) *Gateway {
 		timestamp := time.Now().Format(time.RFC3339)
 		c.String(http.StatusOK, "Combinator Service is running at %s.", timestamp)
 	})
-	// Health check endpoint
+	// Health check endpoint, 不打印日志
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
@@ -67,29 +66,6 @@ func openGatewayCors(r *gin.Engine) {
 	})
 }
 
-func configCheck(confs *common.Config) (common.Config, error) {
-	var resConf common.Config
-	for _, rdbConf := range confs.Rdb {
-		if !rdbConf.Enabled {
-			continue
-		}
-		resConf.Rdb = append(resConf.Rdb, rdbConf)
-	}
-	for _, kvConf := range confs.Kv {
-		if !kvConf.Enabled {
-			continue
-		}
-		resConf.Kv = append(resConf.Kv, kvConf)
-	}
-	for _, s3Conf := range confs.S3 {
-		if !s3Conf.Enabled {
-			continue
-		}
-		resConf.S3 = append(resConf.S3, s3Conf)
-	}
-	return resConf, nil
-}
-
 func (gw *Gateway) Start(addr string) error {
 	err := gw.rdbGateway.Start()
 	if err != nil {
@@ -111,10 +87,7 @@ func (gw *Gateway) Start(addr string) error {
 
 // Reload 重新加载配置
 func (gw *Gateway) Reload(confIn *common.Config) error {
-	conf, err := configCheck(confIn)
-	if err != nil {
-		return err
-	}
+	conf := confIn
 
 	// 重新加载 RDB Gateway
 	if err := gw.rdbGateway.Reload(conf.Rdb); err != nil {
