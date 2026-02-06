@@ -47,11 +47,6 @@ func (gw *KVGateway) loadKVs() error {
 }
 
 func (gw *KVGateway) Start() error {
-	err := gw.Reload(gw.KvConf)
-	if err != nil {
-		return err
-	}
-
 	// KV 路由组
 	gw.grg.Use(gw.middlewareKV())
 	{
@@ -59,7 +54,7 @@ func (gw *KVGateway) Start() error {
 		gw.grg.POST("/set", gw.handleSet)
 	}
 
-	return nil
+	return gw.Reload(gw.KvConf)
 }
 
 func (gw *KVGateway) middlewareKV() gin.HandlerFunc {

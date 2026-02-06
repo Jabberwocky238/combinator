@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 
-	combinator "jabberwocky238/combinator/core/common"
 	rdbModule "jabberwocky238/combinator/core/rdb"
 
 	"github.com/spf13/cobra"
@@ -22,8 +21,7 @@ var (
 	migrateRdbIndex string
 	migrationDir    string
 	apiAddr         string
-	devPort         string
-	prodMode        bool
+	remoteMode      bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -40,9 +38,7 @@ var migrateRdbCmd = &cobra.Command{
 
 func init() {
 	migrateRdbCmd.Flags().StringVar(&migrationDir, "migration-dir", "./migrations", "migrations 文件夹路径")
-	migrateRdbCmd.Flags().StringVar(&apiAddr, "api", "", "Combinator API 服务器地址 (默认从 config.combinator.json 读取)")
-	migrateRdbCmd.Flags().StringVarP(&devPort, "dev", "D", "8899", "开发模式，使用 http://localhost:<port>")
-	migrateRdbCmd.Flags().BoolVarP(&prodMode, "prod", "P", false, "生产模式，从配置文件读取 uid")
+	migrateRdbCmd.Flags().BoolVarP(&remoteMode, "remote", "R", false, "远端模式，从 ~/.combinator/config.json 读取 useruid")
 	migrateCmd.AddCommand(migrateRdbCmd)
 }
 
@@ -50,25 +46,20 @@ func runMigrateRdb(cmd *cobra.Command, args []string) {
 	migrateRdbIndex = args[0]
 
 	// 处理 API 地址
-	if apiAddr != "" {
-		apiAddr = normalizeAPIAddr(apiAddr)
-	} else if prodMode {
-		// 从配置文件读取
-		config, err := loadConfig()
+	if remoteMode {
+		globalConfig, err := loadGlobalConfig()
 		if err != nil {
-			fmt.Printf("读取配置文件失败: %v\n", err)
+			fmt.Printf("读取全局配置失败: %v\n", err)
+			fmt.Println("请先运行 combinator config init && combinator config set useruid <uid>")
 			return
 		}
-		if config.Metadata.UID == "" {
-			fmt.Println("配置文件中未设置 metadata.uid，请使用 --api 参数指定 API 地址")
+		if globalConfig.UserUID == "" {
+			fmt.Println("全局配置中未设置 useruid，请运行 combinator config set useruid <uid>")
 			return
 		}
-		apiAddr = fmt.Sprintf("https://%s.combinator.app238.com", config.Metadata.UID)
-	} else if devPort != "" {
-		apiAddr = fmt.Sprintf("http://localhost:%s", devPort)
+		apiAddr = fmt.Sprintf("https://%s.combinator.app238.com", globalConfig.UserUID)
 	} else {
-		fmt.Println("请使用 --api 参数指定 API 地址，或启用开发模式 (--dev/-D) 或生产模式 (--prod/-P)")
-		return
+		apiAddr = "http://localhost:8899"
 	}
 
 	fmt.Printf("RDB 实例 ID: %s\n", migrateRdbIndex)
@@ -273,21 +264,3 @@ func querySQL(sql string) (string, error) {
 	return string(body), nil
 }
 
-func loadConfig() (*combinator.Config, error) {
-	data, err := os.ReadFile("config.combinator.json")
-	if err != nil {
-		return nil, err
-	}
-	var config combinator.Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
-	return &config, nil
-}
-
-func normalizeAPIAddr(addr string) string {
-	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
-		return addr
-	}
-	return "https://" + addr
-}

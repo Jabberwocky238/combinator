@@ -14,23 +14,9 @@ var (
 )
 
 var defaultConfig = map[string]any{
-	"metadata": map[string]any{
-		"uid": "xxxx",
-	},
-	"rdb": []map[string]any{
-		{
-			"id":      "0",
-			"enabled": true,
-			"url":     "sqlite://:memory:",
-		},
-	},
-	"kv": []map[string]any{
-		{
-			"id":      "0",
-			"enabled": true,
-			"url":     "memory://",
-		},
-	},
+	"rdb": []string{"rdb2077"},
+	"kv":  []string{"kv114514"},
+	// "s3":  []string{"s31919810"},
 }
 
 var initCmd = &cobra.Command{

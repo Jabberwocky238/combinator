@@ -1,14 +1,9 @@
 package combinator
 
 type Config struct {
-	Metadata MetadataConfig `json:"metadata"`
-	Rdb      []RDBConfig    `json:"rdb"`
-	Kv       []KVConfig     `json:"kv"`
-	S3       []S3Config     `json:"s3"`
-}
-
-type MetadataConfig struct {
-	UID string `json:"uid"`
+	Rdb []RDBConfig `json:"rdb"`
+	Kv  []KVConfig  `json:"kv"`
+	S3  []S3Config  `json:"s3"`
 }
 
 type RDBConfig struct {
@@ -30,4 +25,10 @@ type S3Config struct {
 	Enabled  bool   `json:"enabled,omitempty"`
 	URL      string `json:"url"`
 	Metadata any    `json:"metadata,omitempty"`
+}
+
+type DevConfig struct {
+	Rdb []string `json:"rdb"`
+	Kv  []string `json:"kv"`
+	S3  []string `json:"s3"`
 }

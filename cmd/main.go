@@ -16,6 +16,7 @@ func main() {
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(configCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		return

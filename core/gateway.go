@@ -2,7 +2,6 @@ package combinator
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -155,7 +154,7 @@ func (gw *Gateway) SetupReloadAPI(reloadChan chan<- *common.Config) {
 			return
 		}
 
-		fmt.Println("🔄 Received reload request via API...")
+		common.Logger.Infof("Received reload request via API...")
 		reloadChan <- &config
 		c.String(200, "Config Reloaded")
 	})
