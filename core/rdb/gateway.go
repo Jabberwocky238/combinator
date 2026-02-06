@@ -187,7 +187,7 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 		var rdb common.RDB
 		switch parsed.Type {
 		case "postgres":
-			rdb = NewPsqlRDB(parsed.Host, parsed.Port, parsed.User, parsed.Password, parsed.DBName)
+			rdb = NewPsqlRDB(parsed.DSN)
 		case "sqlite":
 			rdb = NewSqliteRDB(parsed.Path)
 		default:

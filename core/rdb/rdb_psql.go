@@ -11,22 +11,14 @@ import (
 var ebpg = EB.With("postgres")
 
 type PsqlRDB struct {
-	db       *sql.DB
-	core     *RDBCore
-	host     string
-	port     int
-	user     string
-	password string
-	dbname   string
+	db   *sql.DB
+	core *RDBCore
+	dsn  string
 }
 
-func NewPsqlRDB(host string, port int, user string, password string, dbname string) *PsqlRDB {
+func NewPsqlRDB(dsn string) *PsqlRDB {
 	rdb := &PsqlRDB{
-		host:     host,
-		port:     port,
-		user:     user,
-		password: password,
-		dbname:   dbname,
+		dsn: dsn,
 	}
 	return rdb
 }
@@ -100,9 +92,7 @@ func (r *PsqlRDB) Batch(stmts []string, args [][]any) error {
 }
 
 func (r *PsqlRDB) Start() error {
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		r.host, r.port, r.user, r.password, r.dbname)
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("postgres", r.dsn)
 	if err != nil {
 		return err
 	}

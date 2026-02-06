@@ -10,6 +10,7 @@ import (
 // ParsedRDBURL contains parsed database connection information
 type ParsedRDBURL struct {
 	Type     string // "postgres" or "sqlite"
+	DSN      string //  Data Source Name
 	Host     string
 	Port     int
 	User     string
@@ -30,19 +31,20 @@ func ParseRDBURL(rawURL string) (*ParsedRDBURL, error) {
 	}
 
 	switch u.Scheme {
-	case "postgres":
-		return parsePostgresURL(u)
+	case "postgres", "postgresql":
+		return parsePostgresURL(u, rawURL)
 	case "sqlite":
-		return parseSQLiteURL(u)
+		return parseSQLiteURL(u, rawURL)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", u.Scheme)
 	}
 }
 
 // parsePostgresURL parses a PostgreSQL URL
-func parsePostgresURL(u *url.URL) (*ParsedRDBURL, error) {
+func parsePostgresURL(u *url.URL, rawURL string) (*ParsedRDBURL, error) {
 	parsed := &ParsedRDBURL{
 		Type: "postgres",
+		DSN:  rawURL,
 		Host: u.Hostname(),
 	}
 
@@ -72,9 +74,10 @@ func parsePostgresURL(u *url.URL) (*ParsedRDBURL, error) {
 }
 
 // parseSQLiteURL parses a SQLite URL
-func parseSQLiteURL(u *url.URL) (*ParsedRDBURL, error) {
+func parseSQLiteURL(u *url.URL, rawURL string) (*ParsedRDBURL, error) {
 	parsed := &ParsedRDBURL{
 		Type: "sqlite",
+		DSN:  rawURL,
 	}
 
 	// Handle :memory: database
