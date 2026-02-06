@@ -27,6 +27,7 @@ type S3 interface {
 	Service
 	Get(key string) ([]byte, error)
 	Put(key string, value []byte) error
+	List(prefix string) ([]string, error)
 	Delete(key string) error
 	GeneratePresignedUploadURL(key string) (string, error)
 	GeneratePresignedDownloadURL(key string) (string, error)

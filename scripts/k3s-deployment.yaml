@@ -294,16 +294,3 @@ spec:
   - port: 8899
     targetPort: 8899
   type: ClusterIP
-
----
-# ExternalName Service (在 distributor namespace 代理到 combinator)
-apiVersion: v1
-kind: Service
-metadata:
-  name: combinator-proxy
-  namespace: distributor
-spec:
-  type: ExternalName
-  externalName: combinator.combinator.svc.cluster.local
-  ports:
-  - port: 8899

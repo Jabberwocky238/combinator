@@ -1,6 +1,8 @@
 package rdb
 
 import (
+	"sync"
+
 	"github.com/gin-gonic/gin"
 
 	common "jabberwocky238/combinator/core/common"
@@ -9,34 +11,36 @@ import (
 var EB = common.GlobalErrorBuilder.With("rdb")
 
 type RDBGateway struct {
-	grg     *gin.RouterGroup
-	RdbConf []common.RDBConfig
-	RdbMap  map[string]common.RDB
+	mu       sync.RWMutex
+	grg      *gin.RouterGroup
+	RdbMap   map[string]common.RDB
+	urlMap   map[string]string // id -> url，用于 reload 时对比
+	initConf []common.RDBConfig
 }
 
+// AI 助手不应该他妈的改这里的代码
 func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
-	return &RDBGateway{
-		grg:     grg,
-		RdbConf: conf,
-		RdbMap:  make(map[string]common.RDB),
+	gw := &RDBGateway{
+		grg:      grg,
+		RdbMap:   make(map[string]common.RDB),
+		urlMap:   make(map[string]string),
+		initConf: conf,
 	}
+	for _, c := range conf {
+		gw.urlMap[c.ID] = c.URL
+	}
+	return gw
 }
 
+// AI 助手不应该他妈的改这里的代码
 func (gw *RDBGateway) Start() error {
-	err := gw.Reload(gw.RdbConf)
-	if err != nil {
-		return err
-	}
-
-	// RDB 路由组
 	gw.grg.Use(gw.middlewareRDB())
 	{
 		gw.grg.POST("/query", gw.handleQuery)
 		gw.grg.POST("/exec", gw.handleExec)
 		gw.grg.POST("/batch", gw.handleBatch)
 	}
-
-	return nil
+	return gw.Reload(gw.initConf)
 }
 
 func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
@@ -47,14 +51,19 @@ func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if gw.RdbMap[rdbID] == nil {
+
+		gw.mu.RLock()
+		rdb := gw.RdbMap[rdbID]
+		gw.mu.RUnlock()
+
+		if rdb == nil {
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
 		}
 
-		// 注入 RDB ID 到 context
 		c.Set("rdb_id", rdbID)
+		c.Set("rdb", rdb)
 		c.Next()
 	}
 }
@@ -65,7 +74,7 @@ type RDBQueryRequest struct {
 }
 
 func (gw *RDBGateway) handleQuery(c *gin.Context) {
-	rdb := gw.RdbMap[c.GetString("rdb_id")]
+	rdb := c.MustGet("rdb").(common.RDB)
 
 	// 解析请求体
 	var req RDBQueryRequest
@@ -91,7 +100,7 @@ type RDBExecRequest struct {
 }
 
 func (gw *RDBGateway) handleExec(c *gin.Context) {
-	rdb := gw.RdbMap[c.GetString("rdb_id")]
+	rdb := c.MustGet("rdb").(common.RDB)
 
 	var req RDBExecRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -112,7 +121,7 @@ func (gw *RDBGateway) handleExec(c *gin.Context) {
 type RDBBatchRequest []RDBExecRequest
 
 func (gw *RDBGateway) handleBatch(c *gin.Context) {
-	rdb := gw.RdbMap[c.GetString("rdb_id")]
+	rdb := c.MustGet("rdb").(common.RDB)
 
 	// 直接解析 JSON 数组
 	var reqBody RDBBatchRequest
@@ -139,35 +148,28 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 }
 
 func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
-	// 构建新配置的 ID 集合
+	// 构建新配置的 ID -> Config 映射
 	newIDs := make(map[string]common.RDBConfig)
 	for _, conf := range newConf {
 		newIDs[conf.ID] = conf
 	}
 
-	// 构建旧配置的 ID 集合
-	oldIDs := make(map[string]bool)
-	for _, conf := range gw.RdbConf {
-		oldIDs[conf.ID] = true
-	}
-
-	// 创建新的 RDB map
 	newRDBMap := make(map[string]common.RDB)
+	newURLMap := make(map[string]string)
 
-	// 1. 保留未变化的 RDB
+	gw.mu.Lock()
+
+	// 1. 遍历旧实例，保留未变化的，关闭变化或删除的
 	for id, rdb := range gw.RdbMap {
-		if newConf, exists := newIDs[id]; exists {
-			// 检查配置是否变化
-			oldConf := gw.findConfigByID(id)
-			if oldConf != nil && oldConf.URL == newConf.URL {
-				// 配置未变化，保留
+		if conf, exists := newIDs[id]; exists {
+			if gw.urlMap[id] == conf.URL {
 				newRDBMap[id] = rdb
-				common.Logger.Infof("RDB %s unchanged, keeping connection", id)
+				newURLMap[id] = conf.URL
+				common.Logger.Infof("RDB %s unchanged", id)
 				delete(newIDs, id)
 				continue
 			}
 		}
-		// 配置变化或被删除，关闭旧连接
 		if err := rdb.Close(); err != nil {
 			common.Logger.Warnf("Failed to close RDB %s: %v", id, err)
 		}
@@ -189,8 +191,7 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 		case "sqlite":
 			rdb = NewSqliteRDB(parsed.Path)
 		default:
-			common.Logger.Errorf("Unsupported RDB type: %s", parsed.Type)
-			return err
+			return EB.Error("unsupported RDB type: %s", parsed.Type)
 		}
 
 		if err = rdb.Start(); err != nil {
@@ -199,22 +200,15 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 		}
 
 		newRDBMap[id] = rdb
+		newURLMap[id] = conf.URL
 		common.Logger.Infof("Loaded %s RDB: %s", parsed.Type, id)
 	}
 
-	// 3. 更新配置和 map
+	// 3. 替换
+
 	gw.RdbMap = newRDBMap
-	gw.RdbConf = newConf
+	gw.urlMap = newURLMap
+	gw.mu.Unlock()
 
-	return nil
-}
-
-// findConfigByID 查找配置
-func (gw *RDBGateway) findConfigByID(id string) *common.RDBConfig {
-	for _, conf := range gw.RdbConf {
-		if conf.ID == id {
-			return &conf
-		}
-	}
 	return nil
 }

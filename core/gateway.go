@@ -12,12 +12,14 @@ import (
 	common "jabberwocky238/combinator/core/common"
 	kvModule "jabberwocky238/combinator/core/kv"
 	rdbModule "jabberwocky238/combinator/core/rdb"
+	s3Module "jabberwocky238/combinator/core/s3"
 )
 
 type Gateway struct {
 	g          *gin.Engine
 	rdbGateway *rdbModule.RDBGateway
 	kvGateway  *kvModule.KVGateway
+	s3Gateway  *s3Module.S3Gateway
 }
 
 func NewGateway(confIn *common.Config, cors bool) *Gateway {
@@ -48,6 +50,7 @@ func NewGateway(confIn *common.Config, cors bool) *Gateway {
 		g:          r,
 		rdbGateway: rdbModule.NewGateway(r.Group("/rdb"), conf.Rdb),
 		kvGateway:  kvModule.NewGateway(r.Group("/kv"), conf.Kv),
+		s3Gateway:  s3Module.NewGateway(r.Group("/s3"), conf.S3),
 	}
 }
 
@@ -55,7 +58,7 @@ func openGatewayCors(r *gin.Engine) {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Combinator-RDB-ID, X-Combinator-KV-ID, X-Combinator-KV-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Combinator-RDB-ID, X-Combinator-KV-ID, X-Combinator-KV-Key, X-Combinator-S3-ID")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
 	})
 
@@ -79,6 +82,12 @@ func configCheck(confs *common.Config) (common.Config, error) {
 		}
 		resConf.Kv = append(resConf.Kv, kvConf)
 	}
+	for _, s3Conf := range confs.S3 {
+		if !s3Conf.Enabled {
+			continue
+		}
+		resConf.S3 = append(resConf.S3, s3Conf)
+	}
 	return resConf, nil
 }
 
@@ -89,6 +98,11 @@ func (gw *Gateway) Start(addr string) error {
 	}
 
 	err = gw.kvGateway.Start()
+	if err != nil {
+		return err
+	}
+
+	err = gw.s3Gateway.Start()
 	if err != nil {
 		return err
 	}
@@ -110,6 +124,11 @@ func (gw *Gateway) Reload(confIn *common.Config) error {
 
 	// 重新加载 KV Gateway
 	if err := gw.kvGateway.Reload(conf.Kv); err != nil {
+		return err
+	}
+
+	// 重新加载 S3 Gateway
+	if err := gw.s3Gateway.Reload(conf.S3); err != nil {
 		return err
 	}
 
