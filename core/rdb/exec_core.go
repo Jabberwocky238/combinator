@@ -17,11 +17,10 @@ type RDBCore struct {
 	reconnect func() error // reconnect callback function
 }
 
-func NewRDBCore(db *sql.DB, rdbType string, reconnect func() error) *RDBCore {
+func NewRDBCore(db *sql.DB, rdbType string) *RDBCore {
 	return &RDBCore{
-		db:        db,
-		rdbType:   rdbType,
-		reconnect: reconnect,
+		db:      db,
+		rdbType: rdbType,
 	}
 }
 
@@ -34,6 +33,7 @@ var (
 	SQL_TYPE_UNKNOWN SQLType = "OTHER"
 )
 
+// 第一步：解析语句，判断类型（DQL/DML/DDL），并根据数据库类型应用 shim 转换
 func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, error) {
 	ast, err := sqlparser.Parse(stmt)
 	if err != nil {
@@ -78,6 +78,25 @@ func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, 
 		default:
 			transformedNode = node
 		}
+	} else if sqlType == SQL_TYPE_DML || sqlType == SQL_TYPE_DQL {
+		var newStmt string
+		switch rdbType {
+		case "postgres":
+			newStmt = shimPlaceholdersPostgres(stmt)
+		case "sqlite":
+			newStmt = shimPlaceholdersSqlite(stmt)
+		default:
+			newStmt = stmt
+		}
+		// 重新解析转换后的语句
+		newAst, err := sqlparser.Parse(newStmt)
+		if err != nil {
+			return nil, SQL_TYPE_UNKNOWN, ebcore.Error("Statement re-parse failed after shimming: %v", err)
+		}
+		transformedNode = newAst.Statements[0]
+	} else {
+		fmt.Printf("[WARN] Statement type is unknown, no shim applied\n")
+		return nil, sqlType, ebcore.Error("unknown statement type: %T", node)
 	}
 
 	fmt.Printf("[INFO] Statement: %s - %s\n", sqlType, transformedNode.String())
@@ -87,17 +106,14 @@ func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, 
 // 第二步：解析语句（带日志）
 func parseStatements(statements []string, rdbType string) []sqlparser.Statement {
 	nodes := make([]sqlparser.Statement, 0, len(statements))
-
 	for i, stmt := range statements {
 		node, _, err := parseStatement(stmt, rdbType)
 		if err != nil {
 			fmt.Printf("[ERROR] Failed to parse statement %d: %v\n", i+1, err)
 			continue
 		}
-
 		nodes = append(nodes, node)
 	}
-
 	return nodes
 }
 
@@ -111,25 +127,23 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 
 	// 执行每条语句
 	for i, node := range nodes {
-		fmt.Printf("[INFO] Executing statement %d\n", i+1)
-
 		var err error
+		stmt := node.String()
+		fmt.Printf("[DEBUG] Statement %d: %s\n", i+1, stmt)
 		switch node.(type) {
 		case *sqlparser.Select:
 			// DQL: 查询，输出 CSV（列头 + 数据）
-			stmt := node.String()
-			err = executeQueryToWriter(tx, stmt, args[i])
+			_, err = tx.Query(stmt, args[i]...)
 		case *sqlparser.Insert, *sqlparser.Update, *sqlparser.Delete:
 			// DML: 修改，输出 JSON（rows_affected, last_insert_id）
-			stmt := node.String()
-			err = executeDMLToWriter(tx, stmt, args[i])
+			_, err = tx.Exec(stmt, args[i]...)
 		case *sqlparser.CreateTable,
 			*sqlparser.AlterTable,
 			*sqlparser.DropTable,
 			*sqlparser.CreateIndex,
 			*sqlparser.DropIndex:
 			// DDL: 定义，传入 node 和 rdbType
-			err = executeDDLToWriter(tx, node, rdbType)
+			_, err = tx.Exec(stmt, args[i]...)
 		default:
 			err = fmt.Errorf("unknown SQL type: %T", node)
 		}
@@ -137,7 +151,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 		// 如果出错，回滚事务
 		if err != nil {
 			tx.Rollback()
-			return fmt.Errorf("statement %d failed: %w", i+1, err)
+			return fmt.Errorf("statement %d failed: %w, stmt: %s, args: %v", i+1, err, stmt, args[i])
 		}
 	}
 
@@ -146,53 +160,6 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
-}
-
-// 在事务中执行查询
-func executeQueryToWriter(tx *sql.Tx, stmt string, args []any) error {
-	rows, err := tx.Query(stmt, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	_, err = rows.Columns()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// 在事务中执行
-func executeDMLToWriter(tx *sql.Tx, stmt string, args []any) error {
-	_, err := tx.Exec(stmt, args...)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// 在事务中执行 DDL，输出 "OK" 到 writer
-func executeDDLToWriter(tx *sql.Tx, node sqlparser.Statement, rdbType string) error {
-	// 根据数据库类型应用 shim
-	var transformedNode sqlparser.Statement
-	switch rdbType {
-	case "postgres":
-		transformedNode = ddlShimPostgres(node)
-	case "sqlite":
-		transformedNode = ddlShimSqlite(node)
-	default:
-		transformedNode = node
-	}
-
-	// 从转换后的 node 生成 SQL
-	stmt := transformedNode.String()
-
-	// 执行 DDL
-	_, err := tx.Exec(stmt)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -205,65 +172,56 @@ func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
 		return nil, fmt.Errorf("not a DQL statement")
 	}
 
-	var result []byte
-	err = retryWithReconnect(func() error {
-		rows, err := r.db.Query(stmt, args...)
-		if err != nil {
-			return err
+	rows, err := r.db.Query(stmt, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+
+	// Use CSV writer
+	writer := csv.NewWriter(&buf)
+
+	// Write column headers
+	if err := writer.Write(columns); err != nil {
+		return nil, err
+	}
+
+	// Write data rows
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
 		}
-		defer rows.Close()
 
-		columns, err := rows.Columns()
-		if err != nil {
-			return err
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
 		}
 
-		var buf bytes.Buffer
-
-		// Use CSV writer
-		writer := csv.NewWriter(&buf)
-
-		// Write column headers
-		if err := writer.Write(columns); err != nil {
-			return err
-		}
-
-		// Write data rows
-		for rows.Next() {
-			values := make([]interface{}, len(columns))
-			valuePtrs := make([]interface{}, len(columns))
-			for i := range values {
-				valuePtrs[i] = &values[i]
-			}
-
-			if err := rows.Scan(valuePtrs...); err != nil {
-				return err
-			}
-
-			// Convert to string array
-			record := make([]string, len(columns))
-			for i, val := range values {
-				if val == nil {
-					record[i] = ""
-				} else {
-					record[i] = fmt.Sprintf("%v", val)
-				}
-			}
-
-			if err := writer.Write(record); err != nil {
-				return err
+		// Convert to string array
+		record := make([]string, len(columns))
+		for i, val := range values {
+			if val == nil {
+				record[i] = ""
+			} else {
+				record[i] = fmt.Sprintf("%v", val)
 			}
 		}
 
-		writer.Flush()
-		if err := writer.Error(); err != nil {
-			return err
+		if err := writer.Write(record); err != nil {
+			return nil, err
 		}
-		result = buf.Bytes()
-		return nil
-	}, r.reconnect, "Query")
+	}
 
-	return result, err
+	writer.Flush()
+	return buf.Bytes(), writer.Error()
 }
 
 // Execute executes a DML/DDL statement with optional parameters
@@ -273,18 +231,16 @@ func (r *RDBCore) Exec(stmt string, args ...any) error {
 		return err
 	}
 
-	return retryWithReconnect(func() error {
-		_, err := r.db.Exec(stmt, args...)
+	_, err = r.db.Exec(stmt, args...)
+	if err != nil {
 		return err
-	}, r.reconnect, "Exec")
+	}
+	return nil
 }
 
 func (r *RDBCore) Batch(stmts []string, args [][]any) error {
 	// 第二步：解析语句（带日志）
 	nodes := parseStatements(stmts, r.rdbType)
-
 	// 第三步：在事务中执行所有语句，使用 buffer writer 收集输出
-	return retryWithReconnect(func() error {
-		return executeInTransaction(r.db, nodes, args, r.rdbType)
-	}, r.reconnect, "Batch")
+	return executeInTransaction(r.db, nodes, args, r.rdbType)
 }
