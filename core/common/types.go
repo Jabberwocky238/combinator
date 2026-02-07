@@ -15,15 +15,16 @@ type Service interface {
 
 type RDB interface {
 	Service
-	Query(stmt string, args ...any) (data []byte, err error)
+	Query(stmt string, args ...any) (io.ReadCloser, error)
 	Exec(stmt string, args ...any) error
 	Batch(stmt []string, args [][]any) error
 }
 
 type KV interface {
 	Service
-	Get(key string) ([]byte, error)
-	Set(key string, value []byte) error
+	Get(key string, opts *models.KVGetOptions) (io.ReadCloser, error)
+	Set(key string, value io.Reader, opts *models.KVSetOptions) error
+	Del(key string, opts *models.KVDelOptions) error
 }
 
 type Queue interface {

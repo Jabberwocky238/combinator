@@ -2,6 +2,7 @@ package rdb
 
 import (
 	"database/sql"
+	"io"
 	"time"
 
 	common "jabberwocky238/combinator/core/common"
@@ -30,7 +31,7 @@ func (r *PsqlRDB) Exec(stmt string, args ...any) error {
 }
 
 // Query executes a SELECT statement with optional parameters and returns CSV
-func (r *PsqlRDB) Query(stmt string, args ...any) ([]byte, error) {
+func (r *PsqlRDB) Query(stmt string, args ...any) (io.ReadCloser, error) {
 	return r.core.Query(stmt, args...)
 }
 

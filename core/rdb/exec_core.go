@@ -1,10 +1,11 @@
 package rdb
 
 import (
-	"bytes"
+	"bufio"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
+	"io"
 
 	sqlparser "github.com/jabberwocky238/sqlparser"
 )
@@ -163,7 +164,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 	return nil
 }
 
-func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
+func (r *RDBCore) Query(stmt string, args ...any) (io.ReadCloser, error) {
 	node, rdbType, err := parseStatement(stmt, r.rdbType)
 	if err != nil {
 		return nil, err
@@ -172,57 +173,63 @@ func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
 		return nil, fmt.Errorf("not a DQL statement")
 	}
 
-	stmt = node.String() // 使用 parse 后的语句，确保占位符已转换
+	stmt = node.String()
 	rows, err := r.db.Query(stmt, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
+		rows.Close()
 		return nil, err
 	}
 
-	var buf bytes.Buffer
+	pr, pw := io.Pipe()
 
-	// Use CSV writer
-	writer := csv.NewWriter(&buf)
+	go func() {
+		defer rows.Close()
+		defer pw.Close()
 
-	// Write column headers
-	if err := writer.Write(columns); err != nil {
-		return nil, err
-	}
+		bufWriter := bufio.NewWriter(pw)
+		writer := csv.NewWriter(bufWriter)
 
-	// Write data rows
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
+		writer.Write(columns)
+		writer.Flush()
+		bufWriter.Flush()
 
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, err
-		}
-
-		// Convert to string array
-		record := make([]string, len(columns))
-		for i, val := range values {
-			if val == nil {
-				record[i] = ""
-			} else {
-				record[i] = fmt.Sprintf("%v", val)
+		for rows.Next() {
+			values := make([]interface{}, len(columns))
+			valuePtrs := make([]interface{}, len(columns))
+			for i := range values {
+				valuePtrs[i] = &values[i]
 			}
+
+			if err := rows.Scan(valuePtrs...); err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+
+			record := make([]string, len(columns))
+			for i, val := range values {
+				if val == nil {
+					record[i] = ""
+				} else {
+					record[i] = fmt.Sprintf("%v", val)
+				}
+			}
+
+			writer.Write(record)
+			writer.Flush()
+			bufWriter.Flush()
 		}
 
-		if err := writer.Write(record); err != nil {
-			return nil, err
+		if err := rows.Err(); err != nil {
+			pw.CloseWithError(err)
 		}
-	}
+	}()
 
-	writer.Flush()
-	return buf.Bytes(), writer.Error()
+	return pr, nil
 }
 
 // Execute executes a DML/DDL statement with optional parameters

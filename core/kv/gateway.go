@@ -1,9 +1,15 @@
 package kv
 
 import (
+	"encoding/json"
+	"io"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	common "jabberwocky238/combinator/core/common"
+	"jabberwocky238/combinator/core/common/models"
 )
 
 type KVGateway struct {
@@ -52,6 +58,7 @@ func (gw *KVGateway) Start() error {
 	{
 		gw.grg.GET("/get", gw.handleGet)
 		gw.grg.POST("/set", gw.handleSet)
+		gw.grg.POST("/del", gw.handleDelete)
 	}
 
 	return gw.Reload(gw.KvConf)
@@ -73,48 +80,102 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 			return
 		}
 
-		// 注入 KV ID 和 Key 到 context
-		c.Set("kv_id", kvID)
+		// 获取 KV 实例
+		kv := gw.KvMap[kvID]
+		if kv == nil {
+			c.JSON(400, gin.H{"error": "invalid KV ID"})
+			c.Abort()
+			return
+		}
+
+		// 获取 pathname
+		pathname := c.Request.URL.Path
+
+		// 解析 options (JSON 格式)，根据 pathname 决定解析类型
+		optionsStr := c.GetHeader("X-Combinator-KV-Options")
+		if optionsStr != "" {
+			switch {
+			case strings.HasSuffix(pathname, "/set"):
+				var setOpts models.KVSetOptions
+				if err := json.Unmarshal([]byte(optionsStr), &setOpts); err == nil {
+					c.Set("kv_set_options", &setOpts)
+				}
+			case strings.HasSuffix(pathname, "/del"):
+				var delOpts models.KVDelOptions
+				if err := json.Unmarshal([]byte(optionsStr), &delOpts); err == nil {
+					c.Set("kv_del_options", &delOpts)
+					// 如果启用 CAS，标记需要读取请求体
+					c.Set("kv_del_cas", delOpts.CAS)
+				}
+			}
+		}
+
+		// 注入 KV 实例和 Key 到 context
+		c.Set("kv", kv)
 		c.Set("kv_key", key)
 		c.Next()
 	}
 }
 
 func (gw *KVGateway) handleGet(c *gin.Context) {
-	kv := gw.KvMap[c.GetString("kv_id")]
-	if kv == nil {
-		c.JSON(400, gin.H{"error": "invalid KV ID"})
-		return
-	}
-
+	kv := c.MustGet("kv").(common.KV)
 	key := c.GetString("kv_key")
 
-	value, err := kv.Get(key)
+	reader, err := kv.Get(key, nil)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	defer reader.Close()
 
-	c.Data(200, "application/octet-stream", value)
+	c.Stream(func(w io.Writer) bool {
+		io.Copy(w, reader)
+		return false
+	})
 }
 
 func (gw *KVGateway) handleSet(c *gin.Context) {
-	kv := gw.KvMap[c.GetString("kv_id")]
-	if kv == nil {
-		c.JSON(400, gin.H{"error": "invalid KV ID"})
-		return
-	}
-
+	kv := c.MustGet("kv").(common.KV)
 	key := c.GetString("kv_key")
 
-	value, err := c.GetRawData()
-	if err != nil {
-		c.JSON(400, gin.H{"error": "failed to read request body"})
+	// 从 context 获取解析好的 options
+	var opts *models.KVSetOptions
+	if val, exists := c.Get("kv_set_options"); exists {
+		opts = val.(*models.KVSetOptions)
+	}
+
+	// 使用流式接口
+	if err := kv.Set(key, c.Request.Body, opts); err != nil {
+		common.Logger.Errorf("Set failed: %v", err)
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := kv.Set(key, value); err != nil {
-		common.Logger.Errorf("Set failed: %v", err)
+	c.String(200, "OK")
+}
+
+func (gw *KVGateway) handleDelete(c *gin.Context) {
+	kv := c.MustGet("kv").(common.KV)
+	key := c.GetString("kv_key")
+
+	// 从 context 获取解析好的 options
+	var opts *models.KVDelOptions
+	if val, exists := c.Get("kv_del_options"); exists {
+		opts = val.(*models.KVDelOptions)
+	}
+
+	// 如果启用 CAS，从请求体读取 Value
+	if opts != nil && opts.CAS {
+		value, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "failed to read request body"})
+			return
+		}
+		opts.Value = value
+	}
+
+	if err := kv.Del(key, opts); err != nil {
+		common.Logger.Errorf("Delete failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -191,4 +252,65 @@ func (gw *KVGateway) findConfigByID(id string) *common.KVConfig {
 		}
 	}
 	return nil
+}
+
+// parseKVSetOptions 解析 Set 选项
+// 格式: ttl=10s&nx=true&xx=false
+func parseKVSetOptions(optionsStr string) *models.KVSetOptions {
+	if optionsStr == "" {
+		return nil
+	}
+
+	opts := &models.KVSetOptions{}
+	params := strings.Split(optionsStr, "&")
+
+	for _, param := range params {
+		kv := strings.SplitN(param, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(kv[0])
+		value := strings.TrimSpace(kv[1])
+
+		switch key {
+		case "ttl":
+			if duration, err := time.ParseDuration(value); err == nil {
+				opts.TTL = &duration
+			}
+		case "nx":
+			opts.NX = value == "true"
+		case "xx":
+			opts.XX = value == "true"
+		}
+	}
+
+	return opts
+}
+
+// parseKVDelOptions 解析 Delete 选项
+// 格式: value=token123
+func parseKVDelOptions(optionsStr string) *models.KVDelOptions {
+	if optionsStr == "" {
+		return nil
+	}
+
+	opts := &models.KVDelOptions{}
+	params := strings.Split(optionsStr, "&")
+
+	for _, param := range params {
+		kv := strings.SplitN(param, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(kv[0])
+		value := strings.TrimSpace(kv[1])
+
+		if key == "value" {
+			opts.Value = []byte(value)
+		}
+	}
+
+	return opts
 }

@@ -1,9 +1,13 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+
 	common "jabberwocky238/combinator/core/common"
+	"jabberwocky238/combinator/core/common/models"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -34,7 +38,7 @@ func NewRedisKV(host string, port int, password string, db int) *RedisKV {
 }
 
 // Get retrieves a value by key
-func (r *RedisKV) Get(key string) ([]byte, error) {
+func (r *RedisKV) Get(key string, opts *models.KVGetOptions) (io.ReadCloser, error) {
 	val, err := r.client.Get(r.ctx, key).Result()
 	if err == redis.Nil {
 		return nil, fmt.Errorf("key not found: %s", key)
@@ -42,12 +46,64 @@ func (r *RedisKV) Get(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte(val), nil
+	return io.NopCloser(bytes.NewReader([]byte(val))), nil
 }
 
 // Set stores a value by key
-func (r *RedisKV) Set(key string, value []byte) error {
-	return r.client.Set(r.ctx, key, value, 0).Err()
+func (r *RedisKV) Set(key string, value io.Reader, opts *models.KVSetOptions) error {
+	// 读取流式数据
+	data, err := io.ReadAll(value)
+	if err != nil {
+		return err
+	}
+
+	// 处理 NX/XX 和 TTL
+	if opts != nil {
+		if opts.NX {
+			// SET key value NX EX ttl
+			if opts.TTL != nil {
+				return r.client.SetNX(r.ctx, key, data, *opts.TTL).Err()
+			}
+			return r.client.SetNX(r.ctx, key, data, 0).Err()
+		}
+		if opts.XX {
+			// SET key value XX EX ttl
+			if opts.TTL != nil {
+				return r.client.SetXX(r.ctx, key, data, *opts.TTL).Err()
+			}
+			return r.client.SetXX(r.ctx, key, data, 0).Err()
+		}
+		if opts.TTL != nil {
+			return r.client.Set(r.ctx, key, data, *opts.TTL).Err()
+		}
+	}
+
+	return r.client.Set(r.ctx, key, data, 0).Err()
+}
+
+// Del deletes a value by key
+func (r *RedisKV) Del(key string, opts *models.KVDelOptions) error {
+	// CAS 删除：使用 Lua 脚本保证原子性
+	if opts != nil && opts.CAS {
+		script := `
+			if redis.call("get", KEYS[1]) == ARGV[1] then
+				return redis.call("del", KEYS[1])
+			else
+				return 0
+			end
+		`
+		result, err := r.client.Eval(r.ctx, script, []string{key}, opts.Value).Result()
+		if err != nil {
+			return err
+		}
+		if result.(int64) == 0 {
+			return fmt.Errorf("value mismatch for key: %s", key)
+		}
+		return nil
+	}
+
+	// 普通删除
+	return r.client.Del(r.ctx, key).Err()
 }
 
 // Start initializes the Redis connection

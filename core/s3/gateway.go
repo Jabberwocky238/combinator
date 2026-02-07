@@ -58,7 +58,17 @@ func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		// 获取 S3 实例
+		s3 := gw.S3Map[s3ID]
+		if s3 == nil {
+			c.JSON(400, gin.H{"error": "invalid S3 ID"})
+			c.Abort()
+			return
+		}
+
 		c.Set("s3_id", s3ID)
+		c.Set("s3", s3)
 
 		// 从 header 获取 object key 并存储到 context
 		key := c.GetHeader("X-Combinator-S3-Object-Key")
@@ -72,23 +82,10 @@ func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
 
 // handleHead 获取对象元数据
 func (gw *S3Gateway) handleHead(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
-	// 优先从 body 获取 key，其次从 context（middleware 设置）
-	var req struct {
-		Key string `json:"key"`
-	}
-	c.ShouldBindJSON(&req)
-
-	key := req.Key
-	if key == "" {
-		key = c.GetString("object_key")
-	}
-
+	// 只从 context（middleware 设置的 header）获取 key
+	key := c.GetString("object_key")
 	if key == "" {
 		c.JSON(400, gin.H{"error": "missing key parameter"})
 		return
@@ -104,23 +101,10 @@ func (gw *S3Gateway) handleHead(c *gin.Context) {
 }
 
 func (gw *S3Gateway) handleGet(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
-	// 优先从 body 获取 key，其次从 context（middleware 设置）
-	var req struct {
-		Key string `json:"key"`
-	}
-	c.ShouldBindJSON(&req)
-
-	key := req.Key
-	if key == "" {
-		key = c.GetString("object_key")
-	}
-
+	// 只从 context（middleware 设置的 header）获取 key
+	key := c.GetString("object_key")
 	if key == "" {
 		c.JSON(400, gin.H{"error": "missing key parameter"})
 		return
@@ -161,11 +145,7 @@ func (gw *S3Gateway) handleGet(c *gin.Context) {
 }
 
 func (gw *S3Gateway) handlePut(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	// 从 context 获取 key（middleware 设置）
 	key := c.GetString("object_key")
@@ -188,11 +168,7 @@ func (gw *S3Gateway) handlePut(c *gin.Context) {
 }
 
 func (gw *S3Gateway) handleDelete(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	// 尝试解析 JSON body
 	var opts models.S3DeleteOptions
@@ -221,11 +197,7 @@ func (gw *S3Gateway) handleDelete(c *gin.Context) {
 
 // handleCopy 复制对象
 func (gw *S3Gateway) handleCopy(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	var req struct {
 		SrcKey string `json:"src_key"`
@@ -251,11 +223,7 @@ func (gw *S3Gateway) handleCopy(c *gin.Context) {
 
 // handleList 列出对象
 func (gw *S3Gateway) handleList(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	var req struct {
 		Prefix     string `json:"prefix"`
@@ -281,11 +249,7 @@ func (gw *S3Gateway) handleList(c *gin.Context) {
 
 // handleGetPresignedURL 获取预签名下载URL
 func (gw *S3Gateway) handleGetPresignedURL(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	var req struct {
 		Key     string `json:"key"`
@@ -319,11 +283,7 @@ func (gw *S3Gateway) handleGetPresignedURL(c *gin.Context) {
 
 // handlePutPresignedURL 获取预签名上传URL
 func (gw *S3Gateway) handlePutPresignedURL(c *gin.Context) {
-	s3 := gw.S3Map[c.GetString("s3_id")]
-	if s3 == nil {
-		c.JSON(400, gin.H{"error": "invalid S3 ID"})
-		return
-	}
+	s3 := c.MustGet("s3").(common.S3)
 
 	var req struct {
 		Key     string `json:"key"`

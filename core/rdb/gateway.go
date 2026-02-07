@@ -1,6 +1,7 @@
 package rdb
 
 import (
+	"io"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -84,14 +85,16 @@ func (gw *RDBGateway) handleQuery(c *gin.Context) {
 	}
 
 	// 设置响应头为 CSV 流式输出
-	data, err := rdb.Query(req.Stmt, req.Args...)
+	reader, err := rdb.Query(req.Stmt, req.Args...)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.Header("Content-Type", "application/csv")
-	c.Writer.Write(data)
+	c.Status(200)
+	_, err = io.Copy(c.Writer, reader)
+	reader.Close()
 }
 
 type RDBExecRequest struct {
