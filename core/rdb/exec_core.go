@@ -164,7 +164,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 }
 
 func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
-	_, rdbType, err := parseStatement(stmt, r.rdbType)
+	node, rdbType, err := parseStatement(stmt, r.rdbType)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +172,7 @@ func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
 		return nil, fmt.Errorf("not a DQL statement")
 	}
 
+	stmt = node.String() // 使用 parse 后的语句，确保占位符已转换
 	rows, err := r.db.Query(stmt, args...)
 	if err != nil {
 		return nil, err
@@ -226,11 +227,12 @@ func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
 
 // Execute executes a DML/DDL statement with optional parameters
 func (r *RDBCore) Exec(stmt string, args ...any) error {
-	_, _, err := parseStatement(stmt, r.rdbType)
+	node, _, err := parseStatement(stmt, r.rdbType)
 	if err != nil {
 		return err
 	}
 
+	stmt = node.String() // 使用 parse 后的语句，确保占位符已转换
 	_, err = r.db.Exec(stmt, args...)
 	if err != nil {
 		return err
