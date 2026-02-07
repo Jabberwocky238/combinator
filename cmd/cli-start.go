@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	combinator "jabberwocky238/combinator/core"
@@ -15,14 +16,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type StartCmd struct{}
+type StartCmd struct {
+	lastHashMu sync.RWMutex
+	lastHash   [32]byte
+}
 
 var (
 	configPath       string
 	listenAddr       string
 	watchMode        string
 	watchInterval    int
-	lastHash         [32]byte
 	startCmdInstance StartCmd
 )
 
@@ -68,12 +71,23 @@ func (s *StartCmd) watchConfigFile(path string, interval int, reloadChan chan<- 
 			continue
 		}
 
-		if newHash == lastHash {
+		// 使用读写锁安全地读取lastHash
+		s.lastHashMu.RLock()
+		currentHash := s.lastHash
+		s.lastHashMu.RUnlock()
+
+		if newHash == currentHash {
 			continue // 文件内容未变更
-		} else {
-			fmt.Println("📝 Config file changed, reloading...")
-			reloadChan <- config
 		}
+
+		fmt.Println("📝 Config file changed, reloading...")
+
+		// 更新hash（在发送到channel之前）
+		s.lastHashMu.Lock()
+		s.lastHash = newHash
+		s.lastHashMu.Unlock()
+
+		reloadChan <- config
 	}
 }
 
@@ -84,7 +98,7 @@ func (s *StartCmd) runStart(cmd *cobra.Command, args []string) {
 		fmt.Printf("Failed to load config: %v\n", err)
 		return
 	}
-	lastHash = newHash
+	s.lastHash = newHash
 
 	// 创建并启动 gateway
 	gateway := combinator.NewGateway(config, false)
@@ -124,12 +138,11 @@ func (s *StartCmd) runStart(cmd *cobra.Command, args []string) {
 			return
 		case newConfig := <-reloadChan:
 			fmt.Println("✅ Reloading gateway with new configuration...")
-			buf, err := json.Marshal(newConfig)
-			if err != nil {
-				fmt.Printf("❌ Failed to print new config: %v\n", err)
+			if err := gateway.Reload(newConfig); err != nil {
+				fmt.Printf("❌ Failed to reload gateway: %v\n", err)
+			} else {
+				fmt.Println("✅ Gateway reloaded successfully")
 			}
-			lastHash = sha256.Sum256(buf)
-			gateway.Reload(newConfig)
 		}
 	}
 }

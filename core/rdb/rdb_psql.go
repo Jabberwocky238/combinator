@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
+	common "jabberwocky238/combinator/core/common"
 	_ "github.com/lib/pq"
 )
 
@@ -92,16 +94,53 @@ func (r *PsqlRDB) Batch(stmts []string, args [][]any) error {
 }
 
 func (r *PsqlRDB) Start() error {
-	db, err := sql.Open("postgres", r.dsn)
-	if err != nil {
+	if err := r.connect(); err != nil {
 		return err
 	}
+	return nil
+}
+
+// connect establishes a new database connection with connection pool settings
+func (r *PsqlRDB) connect() error {
+	db, err := sql.Open("postgres", r.dsn)
+	if err != nil {
+		return ebpg.Error("Failed to open postgres connection: %v", err)
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(10 * time.Minute)
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return ebpg.Error("Failed to ping postgres: %v", err)
+	}
+
 	r.db = db
 	r.core = &RDBCore{
-		db:      db,
-		rdbType: r.Type(),
+		db:        db,
+		rdbType:   r.Type(),
+		reconnect: r.reconnect,
 	}
+
+	common.Logger.Infof("PostgreSQL connection established successfully")
 	return nil
+}
+
+// reconnect closes the old connection and establishes a new one
+func (r *PsqlRDB) reconnect() error {
+	common.Logger.Warnf("Attempting to reconnect to PostgreSQL...")
+
+	// Close old connection if exists
+	if r.db != nil {
+		r.db.Close()
+	}
+
+	// Establish new connection
+	return r.connect()
 }
 
 func (r *PsqlRDB) Close() error {

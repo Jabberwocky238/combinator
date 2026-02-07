@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
-	"strings"
 
 	sqlparser "github.com/jabberwocky238/sqlparser"
 )
@@ -13,14 +12,16 @@ import (
 var ebcore = EB.With("core")
 
 type RDBCore struct {
-	db      *sql.DB
-	rdbType string
+	db        *sql.DB
+	rdbType   string
+	reconnect func() error // reconnect callback function
 }
 
-func NewRDBCore(db *sql.DB, rdbType string) *RDBCore {
+func NewRDBCore(db *sql.DB, rdbType string, reconnect func() error) *RDBCore {
 	return &RDBCore{
-		db:      db,
-		rdbType: rdbType,
+		db:        db,
+		rdbType:   rdbType,
+		reconnect: reconnect,
 	}
 }
 
@@ -98,16 +99,6 @@ func parseStatements(statements []string, rdbType string) []sqlparser.Statement 
 	}
 
 	return nodes
-}
-
-// 截断 SQL 用于日志显示
-func truncateSQL(sql string, maxLen int) string {
-	sql = strings.ReplaceAll(sql, "\n", " ")
-	sql = strings.TrimSpace(sql)
-	if len(sql) > maxLen {
-		return sql[:maxLen] + "..."
-	}
-	return sql
 }
 
 // 第三步：在事务中执行所有语句
@@ -214,56 +205,65 @@ func (r *RDBCore) Query(stmt string, args ...any) ([]byte, error) {
 		return nil, fmt.Errorf("not a DQL statement")
 	}
 
-	rows, err := r.db.Query(stmt, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	var result []byte
+	err = retryWithReconnect(func() error {
+		rows, err := r.db.Query(stmt, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
 
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-
-	// Use CSV writer
-	writer := csv.NewWriter(&buf)
-
-	// Write column headers
-	if err := writer.Write(columns); err != nil {
-		return nil, err
-	}
-
-	// Write data rows
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+		columns, err := rows.Columns()
+		if err != nil {
+			return err
 		}
 
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, err
+		var buf bytes.Buffer
+
+		// Use CSV writer
+		writer := csv.NewWriter(&buf)
+
+		// Write column headers
+		if err := writer.Write(columns); err != nil {
+			return err
 		}
 
-		// Convert to string array
-		record := make([]string, len(columns))
-		for i, val := range values {
-			if val == nil {
-				record[i] = ""
-			} else {
-				record[i] = fmt.Sprintf("%v", val)
+		// Write data rows
+		for rows.Next() {
+			values := make([]interface{}, len(columns))
+			valuePtrs := make([]interface{}, len(columns))
+			for i := range values {
+				valuePtrs[i] = &values[i]
+			}
+
+			if err := rows.Scan(valuePtrs...); err != nil {
+				return err
+			}
+
+			// Convert to string array
+			record := make([]string, len(columns))
+			for i, val := range values {
+				if val == nil {
+					record[i] = ""
+				} else {
+					record[i] = fmt.Sprintf("%v", val)
+				}
+			}
+
+			if err := writer.Write(record); err != nil {
+				return err
 			}
 		}
 
-		if err := writer.Write(record); err != nil {
-			return nil, err
+		writer.Flush()
+		if err := writer.Error(); err != nil {
+			return err
 		}
-	}
+		result = buf.Bytes()
+		return nil
+	}, r.reconnect, "Query")
 
-	writer.Flush()
-	return buf.Bytes(), writer.Error()
+	return result, err
 }
 
 // Execute executes a DML/DDL statement with optional parameters
@@ -273,11 +273,10 @@ func (r *RDBCore) Exec(stmt string, args ...any) error {
 		return err
 	}
 
-	_, err = r.db.Exec(stmt, args...)
-	if err != nil {
+	return retryWithReconnect(func() error {
+		_, err := r.db.Exec(stmt, args...)
 		return err
-	}
-	return nil
+	}, r.reconnect, "Exec")
 }
 
 func (r *RDBCore) Batch(stmts []string, args [][]any) error {
@@ -285,5 +284,7 @@ func (r *RDBCore) Batch(stmts []string, args [][]any) error {
 	nodes := parseStatements(stmts, r.rdbType)
 
 	// 第三步：在事务中执行所有语句，使用 buffer writer 收集输出
-	return executeInTransaction(r.db, nodes, args, r.rdbType)
+	return retryWithReconnect(func() error {
+		return executeInTransaction(r.db, nodes, args, r.rdbType)
+	}, r.reconnect, "Batch")
 }

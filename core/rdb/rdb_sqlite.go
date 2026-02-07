@@ -3,9 +3,9 @@ package rdb
 import (
 	"database/sql"
 	"fmt"
-	common "jabberwocky238/combinator/core/common"
 	"strings"
 
+	common "jabberwocky238/combinator/core/common"
 	_ "modernc.org/sqlite"
 )
 
@@ -64,16 +64,52 @@ func (r *SqliteRDB) Batch(stmts []string, args [][]any) error {
 }
 
 func (r *SqliteRDB) Start() error {
-	sqlite_db, err := sql.Open("sqlite", r.url)
-	if err != nil {
+	if err := r.connect(); err != nil {
 		return err
 	}
+	return nil
+}
+
+// connect establishes a new database connection with connection pool settings
+func (r *SqliteRDB) connect() error {
+	sqlite_db, err := sql.Open("sqlite", r.url)
+	if err != nil {
+		return ebsqlite.Error("Failed to open sqlite connection: %v", err)
+	}
+
+	// Configure connection pool for SQLite
+	sqlite_db.SetMaxOpenConns(1) // SQLite works best with single connection
+	sqlite_db.SetMaxIdleConns(1)
+	sqlite_db.SetConnMaxLifetime(0) // No limit for SQLite
+
+	// Test the connection
+	if err := sqlite_db.Ping(); err != nil {
+		sqlite_db.Close()
+		return ebsqlite.Error("Failed to ping sqlite: %v", err)
+	}
+
 	r.db = sqlite_db
 	r.core = &RDBCore{
-		db:      sqlite_db,
-		rdbType: r.Type(),
+		db:        sqlite_db,
+		rdbType:   r.Type(),
+		reconnect: r.reconnect,
 	}
+
+	common.Logger.Infof("SQLite connection established successfully")
 	return nil
+}
+
+// reconnect closes the old connection and establishes a new one
+func (r *SqliteRDB) reconnect() error {
+	common.Logger.Warnf("Attempting to reconnect to SQLite...")
+
+	// Close old connection if exists
+	if r.db != nil {
+		r.db.Close()
+	}
+
+	// Establish new connection
+	return r.connect()
 }
 
 func (r *SqliteRDB) Close() error {
