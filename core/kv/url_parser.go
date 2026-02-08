@@ -8,12 +8,13 @@ import (
 
 // ParsedKVURL contains parsed KV store connection information
 type ParsedKVURL struct {
-	Type     string // "redis", "rocksdb", or "memory"
+	Type     string // "redis", "rocksdb", "memory", or "tikv"
 	Host     string
 	Port     int
 	Password string
 	DB       int    // for redis database number
 	Path     string // for rocksdb file path
+	Tenant   string // for tikv tenant isolation
 }
 
 // ParseKVURL parses a KV store URL into connection parameters
@@ -21,6 +22,7 @@ type ParsedKVURL struct {
 //   - redis://[:password@]host:port[/db]
 //   - rocksdb:///path/to/db
 //   - memory://
+//   - tikv://host:port[/tenant]
 func ParseKVURL(rawURL string) (*ParsedKVURL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -34,6 +36,8 @@ func ParseKVURL(rawURL string) (*ParsedKVURL, error) {
 		return parseRocksDBURL(u)
 	case "memory":
 		return parseMemoryURL(u)
+	case "tikv":
+		return parseTiKVURL(u)
 	default:
 		return nil, fmt.Errorf("unsupported KV store type: %s", u.Scheme)
 	}
@@ -106,4 +110,33 @@ func parseMemoryURL(u *url.URL) (*ParsedKVURL, error) {
 	return &ParsedKVURL{
 		Type: "memory",
 	}, nil
+}
+
+// parseTiKVURL parses a TiKV URL
+// Format: tikv://host:port[/tenant]
+func parseTiKVURL(u *url.URL) (*ParsedKVURL, error) {
+	parsed := &ParsedKVURL{
+		Type: "tikv",
+		Host: u.Hostname(),
+	}
+
+	// Parse port
+	if u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil {
+			return nil, fmt.Errorf("invalid port: %w", err)
+		}
+		parsed.Port = port
+	} else {
+		parsed.Port = 2379 // default PD port
+	}
+
+	// Parse tenant from path
+	if u.Path != "" && u.Path != "/" {
+		parsed.Tenant = u.Path[1:] // remove leading /
+	} else {
+		parsed.Tenant = "default"
+	}
+
+	return parsed, nil
 }
