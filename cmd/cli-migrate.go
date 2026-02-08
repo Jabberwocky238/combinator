@@ -40,6 +40,9 @@ func init() {
 	migrateRdbCmd.Flags().StringVar(&migrationDir, "migration-dir", "./migrations", "migrations 文件夹路径")
 	migrateRdbCmd.Flags().BoolVarP(&remoteMode, "remote", "R", false, "远端模式，从 ~/.combinator/config.json 读取 useruid")
 	migrateCmd.AddCommand(migrateRdbCmd)
+
+	// 自动注册到 root
+	rootCmd.AddCommand(migrateCmd)
 }
 
 func runMigrateRdb(cmd *cobra.Command, args []string) {

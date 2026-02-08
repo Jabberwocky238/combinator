@@ -9,6 +9,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func init() {
+	RegisterRDBFactory("sqlite", func(parsed *ParsedRDBURL) (common.RDB, error) {
+		return NewSqliteRDB(parsed.Path), nil
+	})
+}
+
 var ebsqlite = EB.With("sqlite")
 
 type SqliteRDB struct {

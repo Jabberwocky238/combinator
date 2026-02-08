@@ -13,8 +13,8 @@ RUN go mod download
 # 复制源代码
 COPY . .
 
-# 构建二进制文件（只包含 PostgreSQL 支持）
-RUN go build -tags=rdb_psql -o combinator ./cmd
+# 构建二进制文件（生产模式，包含所有功能）
+RUN make build-prod
 
 # 运行时镜像
 FROM alpine:latest

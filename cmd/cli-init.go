@@ -27,6 +27,9 @@ var initCmd = &cobra.Command{
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing configuration file")
+
+	// 自动注册到 root
+	rootCmd.AddCommand(initCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) {

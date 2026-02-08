@@ -1,3 +1,6 @@
+//go:build prod
+// +build prod
+
 package main
 
 import (
@@ -40,6 +43,9 @@ func init() {
 	startCmd.Flags().StringVarP(&listenAddr, "listen", "l", "localhost:8899", "监听地址")
 	startCmd.Flags().StringVarP(&watchMode, "watch", "w", "", "配置监听模式: file, api, all")
 	startCmd.Flags().IntVar(&watchInterval, "watch-interval", 5, "文件监听间隔（秒）")
+
+	// 自动注册到 root (仅在 prod 模式下)
+	rootCmd.AddCommand(startCmd)
 }
 
 // 加载配置文件

@@ -187,14 +187,10 @@ func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
 			return err
 		}
 
-		var rdb common.RDB
-		switch parsed.Type {
-		case "postgres":
-			rdb = NewPsqlRDB(parsed.DSN)
-		case "sqlite":
-			rdb = NewSqliteRDB(parsed.Path)
-		default:
-			return EB.Error("unsupported RDB type: %s", parsed.Type)
+		rdb, err := CreateRDB(parsed)
+		if err != nil {
+			common.Logger.Errorf("Failed to create RDB %s: %v", id, err)
+			return err
 		}
 
 		if err = rdb.Start(); err != nil {

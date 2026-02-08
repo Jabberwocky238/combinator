@@ -1,3 +1,6 @@
+//go:build prod || s3_seaweedfs
+// +build prod s3_seaweedfs
+
 package s3
 
 import (

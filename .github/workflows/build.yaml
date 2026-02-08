@@ -17,13 +17,13 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-            binary_name: combinator
-            artifact_name: combinator-linux-amd64
+            binary_name: comb
+            artifact_name: comb-linux-amd64
           - os: windows-latest
             goos: windows
             goarch: amd64
-            binary_name: combinator.exe
-            artifact_name: combinator-windows-amd64
+            binary_name: comb.exe
+            artifact_name: comb-windows-amd64
 
     runs-on: ${{ matrix.os }}
 
@@ -45,7 +45,7 @@ jobs:
       env:
         CGO_ENABLED: 1
       run: |
-        make build
+        make build-dev
         ls -lh bin/
 
     - name: Build Binary (Windows)
@@ -120,7 +120,7 @@ jobs:
             per_page: 100
           });
 
-          const artifactNames = ['combinator-linux-amd64', 'combinator-windows-amd64'];
+          const artifactNames = ['comb-linux-amd64', 'comb-windows-amd64'];
 
           for (const name of artifactNames) {
             const filtered = artifacts.data.artifacts

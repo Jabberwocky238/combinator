@@ -57,6 +57,9 @@ func init() {
 	devListCmd.AddCommand(devListRdbCmd)
 	devCmd.AddCommand(devClearCmd)
 	devCmd.AddCommand(devListCmd)
+
+	// 自动注册到 root
+	rootCmd.AddCommand(devCmd)
 }
 
 func runDev(cmd *cobra.Command, args []string) {

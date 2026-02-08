@@ -1,3 +1,6 @@
+//go:build prod || kv_tikv
+// +build prod kv_tikv
+
 package kv
 
 import (

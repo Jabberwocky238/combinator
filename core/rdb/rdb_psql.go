@@ -1,3 +1,6 @@
+//go:build prod || rdb_psql
+// +build prod rdb_psql
+
 package rdb
 
 import (
@@ -9,6 +12,12 @@ import (
 
 	_ "github.com/lib/pq"
 )
+
+func init() {
+	RegisterRDBFactory("postgres", func(parsed *ParsedRDBURL) (common.RDB, error) {
+		return NewPsqlRDB(parsed.DSN), nil
+	})
+}
 
 var ebpg = EB.With("postgres")
 

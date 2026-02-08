@@ -1,3 +1,6 @@
+//go:build prod || s3_minio
+// +build prod s3_minio
+
 package s3
 
 import (

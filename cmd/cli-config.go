@@ -78,6 +78,9 @@ var configSetCmd = &cobra.Command{
 func init() {
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configSetCmd)
+
+	// 自动注册到 root
+	rootCmd.AddCommand(configCmd)
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) {
