@@ -6,7 +6,6 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/jabberwocky238/sqlparser v0.0.4
 	github.com/lib/pq v1.10.9
-	github.com/linxGnu/grocksdb v1.10.4
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/redis/go-redis/v9 v9.3.0
 	github.com/sirupsen/logrus v1.9.4

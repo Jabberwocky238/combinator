@@ -25,26 +25,35 @@ type ParsedRDBURL struct {
 //   - sqlite:///path/to/db.db
 //   - sqlite://:memory:
 func ParseRDBURL(rawURL string) (*ParsedRDBURL, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %w", err)
+	// 找到第一个 :// 的位置
+	idx := strings.Index(rawURL, "://")
+	if idx == -1 {
+		return nil, fmt.Errorf("invalid RDB URL: %s", rawURL)
 	}
 
-	switch u.Scheme {
+	dbType := rawURL[:idx]
+	rawInner := rawURL[idx+3:] // 跳过 ://
+
+	fmt.Println("Paring RDB URL: " + rawURL)
+	switch dbType {
 	case "postgres", "postgresql":
-		return parsePostgresURL(u, rawURL)
+		return parsePostgresURL(dbType, rawInner)
 	case "sqlite":
-		return parseSQLiteURL(u, rawURL)
+		return parseSQLiteURL(dbType, rawInner)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s", u.Scheme)
+		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
 }
 
 // parsePostgresURL parses a PostgreSQL URL
-func parsePostgresURL(u *url.URL, rawURL string) (*ParsedRDBURL, error) {
+func parsePostgresURL(dbType, rawInner string) (*ParsedRDBURL, error) {
+	u, err := url.Parse(dbType + "://" + rawInner)
+	if err != nil {
+		return nil, fmt.Errorf("invalid PostgreSQL URL: %w", err)
+	}
 	parsed := &ParsedRDBURL{
 		Type: "postgres",
-		DSN:  rawURL,
+		DSN:  dbType + "://" + rawInner,
 		Host: u.Hostname(),
 	}
 
@@ -74,26 +83,22 @@ func parsePostgresURL(u *url.URL, rawURL string) (*ParsedRDBURL, error) {
 }
 
 // parseSQLiteURL parses a SQLite URL
-func parseSQLiteURL(u *url.URL, rawURL string) (*ParsedRDBURL, error) {
+func parseSQLiteURL(dbType, rawInner string) (*ParsedRDBURL, error) {
 	parsed := &ParsedRDBURL{
 		Type: "sqlite",
-		DSN:  rawURL,
+		DSN:  dbType + "://" + rawInner,
 	}
 
 	// Handle :memory: database
-	if u.Host == ":memory:" || u.Path == ":memory:" {
+	if rawInner == ":memory:" {
 		parsed.Path = ":memory:"
 		return parsed, nil
 	}
 
 	// Handle file path
-	// sqlite:///path/to/db.db -> /path/to/db.db
-	// sqlite://path/to/db.db -> path/to/db.db
-	if u.Host == "" {
-		parsed.Path = u.Path
-	} else {
-		parsed.Path = u.Host + u.Path
-	}
+	// Windows 路径需要转换反斜杠为正斜杠
+	path := strings.ReplaceAll(rawInner, "\\", "/")
+	parsed.Path = path
 
 	return parsed, nil
 }

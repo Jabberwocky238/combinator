@@ -11,6 +11,8 @@ import (
 	"jabberwocky238/combinator/core/common/models"
 )
 
+var ConditionalS3StaticHandler func(map[string]common.S3) func(c *gin.Context)
+
 type S3Gateway struct {
 	grg    *gin.RouterGroup
 	S3Conf []common.S3Config
@@ -45,7 +47,9 @@ func (gw *S3Gateway) Start() error {
 	}
 
 	// 特殊路由：直接访问静态资源，不需要 middlewareS3
-	gw.grg.GET("/-/:s3_id/*key", gw.handleStaticResource)
+	if ConditionalS3StaticHandler != nil {
+		gw.grg.GET("/-/:s3_id/*key", ConditionalS3StaticHandler(gw.S3Map))
+	}
 
 	return nil
 }
@@ -313,50 +317,6 @@ func (gw *S3Gateway) handlePutPresignedURL(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"url": url})
-}
-
-// handleStaticResource 直接访问静态资源
-func (gw *S3Gateway) handleStaticResource(c *gin.Context) {
-	s3ID := c.Param("s3_id")
-	if s3ID == "" {
-		c.Status(404)
-		return
-	}
-
-	s3 := gw.S3Map[s3ID]
-	if s3 == nil {
-		c.Status(404)
-		return
-	}
-
-	key := c.Param("key")
-	if key == "" || key == "/" {
-		c.Status(404)
-		return
-	}
-	key = key[1:] // 移除开头的斜杠
-
-	reader, info, err := s3.Get(key, nil)
-	if err != nil {
-		c.Status(404)
-		return
-	}
-	defer reader.Close()
-
-	// 设置响应头（从 Get 返回的元数据中获取）
-	if info.ContentType != "" {
-		c.Header("Content-Type", info.ContentType)
-	}
-	c.Header("Content-Length", strconv.FormatInt(info.Size, 10))
-	c.Header("Last-Modified", info.LastModified.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
-	if info.ETag != "" {
-		c.Header("ETag", info.ETag)
-	}
-
-	c.Stream(func(w io.Writer) bool {
-		io.Copy(w, reader)
-		return false
-	})
 }
 
 // Reload 重新加载 S3 配置

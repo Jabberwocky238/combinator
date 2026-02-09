@@ -41,6 +41,8 @@ func runInit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	runConfigInit(cmd, args)
+
 	// Marshal to JSON with indentation
 	jsonData, err := json.MarshalIndent(defaultConfig, "", "  ")
 	if err != nil {

@@ -1,3 +1,6 @@
 {
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "gopls": {
+      "build.buildFlags": ["-tags=rdb_psql,kv_tikv,kv_redis,s3_minio,s3_seaweedfs"]
+    }
 }

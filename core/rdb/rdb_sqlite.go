@@ -56,15 +56,12 @@ func (r *SqliteRDB) Start() error {
 
 // connect establishes a new database connection with connection pool settings
 func (r *SqliteRDB) connect() error {
+	common.Logger.Infof("Connecting to SQLite with path: %s", r.url)
+
 	sqlite_db, err := sql.Open("sqlite", r.url)
 	if err != nil {
 		return ebsqlite.Error("Failed to open sqlite connection: %v", err)
 	}
-
-	// Configure connection pool for SQLite
-	sqlite_db.SetMaxOpenConns(1) // SQLite works best with single connection
-	sqlite_db.SetMaxIdleConns(1)
-	sqlite_db.SetConnMaxLifetime(0) // No limit for SQLite
 
 	// Test the connection
 	if err := sqlite_db.Ping(); err != nil {

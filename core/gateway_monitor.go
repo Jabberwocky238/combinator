@@ -1,3 +1,6 @@
+//go:build !prod
+// +build !prod
+
 package combinator
 
 import (

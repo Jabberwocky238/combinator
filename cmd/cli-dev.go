@@ -1,3 +1,6 @@
+//go:build !prod
+// +build !prod
+
 package main
 
 import (
@@ -70,21 +73,21 @@ func runDev(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	var config common.Config
-	if err := json.Unmarshal(configJSON, &config); err != nil {
-		fmt.Printf("Failed to parse config file: %v\n", err)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Failed to get user home directory: %v\n", err)
+		return
+	}
+	combDir := filepath.Join(home, ".combinator")
+	if err := os.MkdirAll(combDir, 0755); err != nil {
+		fmt.Printf("Failed to create combinator directory: %v\n", err)
 		return
 	}
 
-	// 获取 rdb 存储目录
-	home, err2 := os.UserHomeDir()
-	if err2 != nil {
-		fmt.Printf("Failed to get home directory: %v\n", err2)
-		return
-	}
-	rdbDir := filepath.Join(home, ".combinator", "rdb")
-	if err := os.MkdirAll(rdbDir, 0755); err != nil {
-		fmt.Printf("Failed to create rdb directory: %v\n", err)
+	var config common.DevConfig
+	var realConfig common.Config
+	if err := json.Unmarshal(configJSON, &config); err != nil {
+		fmt.Printf("Failed to parse config file: %v\n", err)
 		return
 	}
 
@@ -92,21 +95,48 @@ func runDev(cmd *cobra.Command, args []string) {
 	fmt.Println("🔧 Development mode")
 
 	for i := range config.Rdb {
-		oldURL := config.Rdb[i].URL
-		sqlitePath := filepath.Join(rdbDir, config.Rdb[i].ID+".sqlite")
-		config.Rdb[i].URL = "sqlite://" + sqlitePath
-		fmt.Printf("  ✓ RDB[%s]: %s -> sqlite://%s\n", config.Rdb[i].ID, oldURL, sqlitePath)
+		sqlitePath, err := getHomeDirWithSuffix("rdb", config.Rdb[i]+".sqlite")
+		if err != nil {
+			fmt.Printf("Failed to get SQLite path for RDB[%s]: %v\n", config.Rdb[i], err)
+			return
+		}
+		realConfig.Rdb = append(realConfig.Rdb, common.RDBConfig{
+			ID:  config.Rdb[i],
+			URL: "sqlite://" + sqlitePath,
+		})
+		fmt.Printf("  ✓ RDB[%s] -> %s\n", config.Rdb[i], sqlitePath)
 	}
 
 	// 转换所有 KV 为内存模式
 	for i := range config.Kv {
-		oldURL := config.Kv[i].URL
-		config.Kv[i].URL = "memory://"
-		fmt.Printf("  ✓ KV[%s]: %s -> memory://\n", config.Kv[i].ID, oldURL)
+		memoryKV := common.KVConfig{
+			ID:  config.Kv[i],
+			URL: "memory://",
+		}
+		realConfig.Kv = append(realConfig.Kv, memoryKV)
+		fmt.Printf("  ✓ KV[%s] -> %s\n", config.Kv[i], "memory://")
+	}
+
+	for i := range config.S3 {
+		s3Path, err := getHomeDirWithSuffix("s3", config.S3[i])
+		if err != nil {
+			fmt.Printf("Failed to get path for S3[%s]: %v\n", config.S3[i], err)
+			return
+		}
+		if err := os.MkdirAll(s3Path, 0755); err != nil {
+			fmt.Printf("Failed to create directory for S3[%s]: %v\n", config.S3[i], err)
+			return
+		}
+		localS3 := common.S3Config{
+			ID:  config.S3[i],
+			URL: "local://" + s3Path,
+		}
+		realConfig.S3 = append(realConfig.S3, localS3)
+		fmt.Printf("  ⚠️  S3[%s] is not supported in dev mode and will be ignored\n", config.S3[i])
 	}
 
 	// 启动网关
-	gateway := combinator.NewGateway(&config, true)
+	gateway := combinator.NewGateway(&realConfig, true)
 	gateway.SetupMonitorAPI()
 
 	// 启动信号监听
@@ -127,16 +157,16 @@ func runDev(cmd *cobra.Command, args []string) {
 	fmt.Println("\n✓ Received interrupt signal, shutting down gracefully...")
 }
 
-func getRdbDir() (string, error) {
+func getHomeDirWithSuffix(suffixs ...string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("无法获取 HOME 目录: %w", err)
 	}
-	return filepath.Join(home, ".combinator", "rdb"), nil
+	return filepath.Join(home, ".combinator", filepath.Join(suffixs...)), nil
 }
 
 func runDevListRdb(cmd *cobra.Command, args []string) {
-	rdbDir, err := getRdbDir()
+	rdbDir, err := getHomeDirWithSuffix("rdb")
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
@@ -175,7 +205,7 @@ func runDevListRdb(cmd *cobra.Command, args []string) {
 }
 
 func runDevClearRdb(cmd *cobra.Command, args []string) {
-	rdbDir, err := getRdbDir()
+	rdbDir, err := getHomeDirWithSuffix("rdb")
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

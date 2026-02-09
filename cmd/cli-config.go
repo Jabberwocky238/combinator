@@ -94,8 +94,7 @@ func runConfigInit(cmd *cobra.Command, args []string) {
 
 	// 检查是否已存在
 	if _, err := os.Stat(configPath); err == nil {
-		fmt.Printf("配置文件已存在: %s\n", configPath)
-		fmt.Println("如需重新初始化，请先手动删除该文件")
+		fmt.Printf("✓ 本机配置文件已存在: %s\n", configPath)
 		return
 	}
 
