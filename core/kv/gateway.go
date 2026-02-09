@@ -13,7 +13,8 @@ import (
 
 type KVGateway struct {
 	*common.BaseGateway[common.KV, common.KVConfig]
-	grg *gin.RouterGroup
+	grg           *gin.RouterGroup
+	TenantHandler gin.HandlerFunc
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.KVConfig) *KVGateway {
@@ -39,6 +40,10 @@ func (gw *KVGateway) Start() error {
 
 	// KV 路由组
 	gw.grg.Use(gw.middlewareKV())
+	if gw.TenantHandler != nil {
+		gw.grg.Use(gw.TenantHandler)
+	}
+	gw.grg.Use(gw.middlewareCatchKV())
 	{
 		gw.grg.GET("/get", gw.handleGet)
 		gw.grg.POST("/set", gw.handleSet)
@@ -75,14 +80,6 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 			return
 		}
 
-		// 获取 KV 实例
-		kv, ok := gw.Get(kvID)
-		if !ok {
-			c.JSON(400, gin.H{"error": "invalid KV ID"})
-			c.Abort()
-			return
-		}
-
 		// 获取 pathname
 		pathname := c.Request.URL.Path
 
@@ -103,9 +100,22 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 			}
 		}
 
-		// 注入 KV 实例和 Key 到 context
-		c.Set("kv", kv)
 		c.Set("kv_key", key)
+		c.Next()
+	}
+}
+
+func (gw *KVGateway) middlewareCatchKV() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kvID := c.MustGet("kv_id").(string)
+		// 获取 KV 实例
+		kv, ok := gw.Get(kvID)
+		if !ok {
+			c.JSON(400, gin.H{"error": "invalid KV ID"})
+			c.Abort()
+			return
+		}
+		c.Set("kv", kv)
 		c.Next()
 	}
 }

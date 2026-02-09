@@ -72,7 +72,6 @@ func (s *StartCmd) runStart(cmd *cobra.Command, args []string) {
 
 	// 创建并启动 gateway
 	gateway := combinator.NewGateway(config, false)
-	gateway.SetupVerify()
 
 	// 启动信号监听
 	sigChan := make(chan os.Signal, 1)

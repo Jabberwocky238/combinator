@@ -1,7 +1,6 @@
 package rdb
 
 import (
-	"context"
 	"io"
 
 	"github.com/gin-gonic/gin"
@@ -13,14 +12,11 @@ var EB = common.GlobalErrorBuilder.With("rdb")
 
 type RDBGateway struct {
 	*common.BaseGateway[common.RDB, common.RDBConfig]
-	ctx context.Context
-	grg *gin.RouterGroup
-
-	// 可选的 ID 转换器（生产模式注入）
-	idResolver func(c *gin.Context) (string, error)
+	grg           *gin.RouterGroup
+	TenantHandler gin.HandlerFunc
 }
 
-func NewGateway(ctx context.Context, grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
+func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 	parser := func(c common.RDBConfig) (common.RDB, error) {
 		parsed, err := ParseRDBURL(c.URL)
 		if err != nil {
@@ -31,20 +27,9 @@ func NewGateway(ctx context.Context, grg *gin.RouterGroup, conf []common.RDBConf
 
 	gw := RDBGateway{
 		BaseGateway: common.NewBaseGateway(conf, parser),
-		ctx:         ctx,
 		grg:         grg,
-		idResolver:  nil, // 默认为 nil，生产模式注入
-	}
-
-	if resolver, ok := ctx.Value("rdb_id_resolver").(func(c *gin.Context) (string, error)); ok {
-		gw.SetIDResolver(resolver)
 	}
 	return &gw
-}
-
-// SetIDResolver 设置 ID 解析器（生产模式注入）
-func (gw *RDBGateway) SetIDResolver(resolver func(c *gin.Context) (string, error)) {
-	gw.idResolver = resolver
 }
 
 func (gw *RDBGateway) Start() error {
@@ -55,6 +40,10 @@ func (gw *RDBGateway) Start() error {
 
 	// 设置路由
 	gw.grg.Use(gw.middlewareRDB())
+	if gw.TenantHandler != nil {
+		gw.grg.Use(gw.TenantHandler)
+	}
+	gw.grg.Use(gw.middlewareCatchRDB())
 	{
 		gw.grg.POST("/query", gw.handleQuery)
 		gw.grg.POST("/exec", gw.handleExec)
@@ -76,35 +65,27 @@ func (gw *RDBGateway) Type() string {
 
 func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var rdbID string
-		var err error
-
-		// 使用 idResolver（如果有）
-		if gw.idResolver != nil {
-			rdbID, err = gw.idResolver(c)
-			if err != nil {
-				c.JSON(400, gin.H{"error": err.Error()})
-				c.Abort()
-				return
-			}
-		} else {
-			// 默认行为：直接从 header 获取
-			rdbID = c.GetHeader("X-Combinator-RDB-ID")
-			if rdbID == "" {
-				c.JSON(400, gin.H{"error": "missing X-Combinator-RDB-ID header"})
-				c.Abort()
-				return
-			}
+		rdbID := c.GetHeader("X-Combinator-RDB-ID")
+		if rdbID == "" {
+			c.JSON(400, gin.H{"error": "missing X-Combinator-RDB-ID header"})
+			c.Abort()
+			return
 		}
 
+		c.Set("rdb_id", rdbID)
+		c.Next()
+	}
+}
+
+func (gw *RDBGateway) middlewareCatchRDB() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rdbID := c.MustGet("rdb_id").(string)
 		rdb, ok := gw.Get(rdbID)
 		if !ok {
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
 		}
-
-		c.Set("rdb_id", rdbID)
 		c.Set("rdb", rdb)
 		c.Next()
 	}

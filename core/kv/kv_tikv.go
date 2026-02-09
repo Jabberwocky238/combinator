@@ -17,14 +17,7 @@ import (
 
 func init() {
 	RegisterKVFactory("tikv", func(parsed *ParsedKVURL) (common.KV, error) {
-		// 支持多个 PD 地址，格式: tikv://pd1:2379,pd2:2379,pd3:2379
-		// 或者单个: tikv://localhost:2379/tenant
-		pdAddrs := []string{fmt.Sprintf("%s:%d", parsed.Host, parsed.Port)}
-
-		// 如果有额外的 hosts（从 query 参数或其他方式解析）
-		// 可以在这里添加
-
-		return NewTiKV(pdAddrs, parsed.Tenant), nil
+		return NewTiKV([]string{"tikv-pd-client.tikv.svc.cluster.local:2379"}, parsed.Tenant), nil
 	})
 }
 

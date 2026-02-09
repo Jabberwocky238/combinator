@@ -15,7 +15,8 @@ var ConditionalS3StaticHandler func(map[string]common.S3) func(c *gin.Context)
 
 type S3Gateway struct {
 	*common.BaseGateway[common.S3, common.S3Config]
-	grg *gin.RouterGroup
+	grg           *gin.RouterGroup
+	TenantHandler gin.HandlerFunc
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.S3Config) *S3Gateway {
@@ -40,6 +41,10 @@ func (gw *S3Gateway) Start() error {
 	}
 
 	gw.grg.Use(gw.middlewareS3())
+	if gw.TenantHandler != nil {
+		gw.grg.Use(gw.TenantHandler)
+	}
+	gw.grg.Use(gw.middlewareCatchS3())
 	{
 		// 对象操作 - 使用 JSON body 传递参数
 		gw.grg.POST("/head", gw.handleHead)
@@ -79,7 +84,19 @@ func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		c.Set("s3_id", s3ID)
+		// 从 header 获取 object key 并存储到 context
+		key := c.GetHeader("X-Combinator-S3-Object-Key")
+		if key != "" {
+			c.Set("object_key", key)
+		}
+		c.Next()
+	}
+}
 
+func (gw *S3Gateway) middlewareCatchS3() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		s3ID := c.MustGet("s3_id").(string)
 		// 获取 S3 实例
 		s3, ok := gw.Get(s3ID)
 		if !ok {
@@ -87,16 +104,7 @@ func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		c.Set("s3_id", s3ID)
 		c.Set("s3", s3)
-
-		// 从 header 获取 object key 并存储到 context
-		key := c.GetHeader("X-Combinator-S3-Object-Key")
-		if key != "" {
-			c.Set("object_key", key)
-		}
-
 		c.Next()
 	}
 }
