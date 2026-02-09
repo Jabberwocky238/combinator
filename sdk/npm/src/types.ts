@@ -1,5 +1,7 @@
 export interface CombinatorConfig {
   baseURL?: string
+  uid?: string
+  secretKey?: string
 }
 
 export interface RDBOptions {

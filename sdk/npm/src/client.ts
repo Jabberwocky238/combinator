@@ -14,12 +14,21 @@ import type {
   S3ListOptions,
   S3ListResult,
 } from './types'
+import { HMACSignature } from './crypto'
 
 export class Combinator {
+  isLocal = false
   private baseURL: string
+  private uid?: string
+  private secretKey?: string
 
   constructor(config: CombinatorConfig = {}) {
-    this.baseURL = (config.baseURL ?? 'http://localhost:8899').replace(/\/$/, '')
+    this.baseURL = (config.baseURL ?? process.env.COMBINATOR_BASE_URL ?? 'http://localhost:8899').replace(/\/$/, '')
+    if (this.baseURL.includes('localhost') && this.baseURL.startsWith('http://') && !this.baseURL.startsWith('https://')) {
+      this.isLocal = true
+    }
+    this.uid = config.uid ?? process.env.RAYSAIL_UID
+    this.secretKey = config.secretKey ?? process.env.RAYSAIL_SECRET_KEY
   }
 
   async request(
@@ -28,6 +37,32 @@ export class Combinator {
     headers?: HeadersInit,
     body?: BodyInit
   ): Promise<Response> {
+    if (!this.isLocal) {
+      if (!this.uid || !this.secretKey) {
+        throw new Error('UID and Secret Key are required for remote requests')
+      }
+
+      // Sign the request body (same as Go implementation)
+      let bodyData: Uint8Array
+      if (body instanceof Uint8Array) {
+        bodyData = body
+      } else if (typeof body === 'string') {
+        bodyData = new TextEncoder().encode(body)
+      } else if (body instanceof Blob) {
+        bodyData = new Uint8Array(await body.arrayBuffer())
+      } else if (body) {
+        bodyData = new TextEncoder().encode(JSON.stringify(body))
+      } else {
+        bodyData = new Uint8Array(0)
+      }
+
+      const signature = await HMACSignature.generate(this.secretKey, bodyData)
+      headers = {
+        ...headers,
+        'X-Raysail-UID': this.uid,
+        'X-Raysail-Signature': signature,
+      }
+    }
     const response = await fetch(`${this.baseURL}${path}`, {
       method,
       headers: headers,
