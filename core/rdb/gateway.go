@@ -1,6 +1,7 @@
 package rdb
 
 import (
+	"context"
 	"io"
 
 	"github.com/gin-gonic/gin"
@@ -12,13 +13,14 @@ var EB = common.GlobalErrorBuilder.With("rdb")
 
 type RDBGateway struct {
 	*common.BaseGateway[common.RDB, common.RDBConfig]
+	ctx context.Context
 	grg *gin.RouterGroup
 
 	// 可选的 ID 转换器（生产模式注入）
 	idResolver func(c *gin.Context) (string, error)
 }
 
-func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
+func NewGateway(ctx context.Context, grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 	parser := func(c common.RDBConfig) (common.RDB, error) {
 		parsed, err := ParseRDBURL(c.URL)
 		if err != nil {
@@ -27,11 +29,17 @@ func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
 		return CreateRDB(parsed)
 	}
 
-	return &RDBGateway{
+	gw := RDBGateway{
 		BaseGateway: common.NewBaseGateway(conf, parser),
+		ctx:         ctx,
 		grg:         grg,
 		idResolver:  nil, // 默认为 nil，生产模式注入
 	}
+
+	if resolver, ok := ctx.Value("rdb_id_resolver").(func(c *gin.Context) (string, error)); ok {
+		gw.SetIDResolver(resolver)
+	}
+	return &gw
 }
 
 // SetIDResolver 设置 ID 解析器（生产模式注入）

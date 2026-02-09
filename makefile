@@ -21,7 +21,10 @@ build-dev:
 build-prod:
 	go build -tags=prod -o bin/combinator$(SUFFIX) ./cmd
 
-.PHONY: dev build-dev build-prod
+docker-build-prod:
+	go build -tags=prod -o bin/combinator ./cmd
+
+.PHONY: dev build-dev build-prod docker-build-prod
 
 test-migrate:
 	go run -tags=$(BUILD_TAGS) ./cmd run migrate -i 0 -d ./tests/migrations

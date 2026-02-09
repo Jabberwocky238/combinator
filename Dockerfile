@@ -16,7 +16,7 @@ COPY . .
 ENV GIN_MODE=release
 
 # 构建二进制文件（生产模式，包含所有功能）
-RUN make build-prod
+RUN make docker-build-prod
 
 # 运行时镜像
 FROM alpine:latest

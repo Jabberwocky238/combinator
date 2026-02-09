@@ -45,7 +45,7 @@ jobs:
       env:
         CGO_ENABLED: 1
       run: |
-        make build-dev
+        go build -tags=dev -o bin/${{ matrix.binary_name }} ./cmd
         ls -lh bin/
 
     - name: Build Binary (Windows)
@@ -53,7 +53,7 @@ jobs:
       env:
         CGO_ENABLED: 1
       run: |
-        go build -o bin/${{ matrix.binary_name }} ./cmd
+        go build -tags=dev -o bin/${{ matrix.binary_name }} ./cmd
         dir bin
 
     - name: Upload Binary

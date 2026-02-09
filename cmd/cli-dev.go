@@ -91,9 +91,9 @@ func runDev(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// 转换所有 RDB 为本地 SQLite 文件
 	fmt.Println("🔧 Development mode")
 
+	// 转换所有 RDB 为本地 SQLite 文件
 	for i := range config.Rdb {
 		sqlitePath, err := getHomeDirWithSuffix("rdb", config.Rdb[i]+".sqlite")
 		if err != nil {
@@ -116,6 +116,7 @@ func runDev(cmd *cobra.Command, args []string) {
 		fmt.Printf("  ✓ KV[%s] -> %s\n", config.Kv[i], "memory://")
 	}
 
+	// 转换所有 S3 为本地目录
 	for i := range config.S3 {
 		s3Path, err := getHomeDirWithSuffix("s3", config.S3[i])
 		if err != nil {
