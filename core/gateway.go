@@ -1,9 +1,8 @@
 package combinator
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,27 +14,25 @@ import (
 )
 
 type Gateway struct {
-	g          *gin.Engine
-	rdbGateway *rdbModule.RDBGateway
-	kvGateway  *kvModule.KVGateway
-	s3Gateway  *s3Module.S3Gateway
+	g                   *gin.Engine
+	userCredentialsLock sync.RWMutex
+	userCredentials     map[string]string
+	rdbGateway          *rdbModule.RDBGateway
+	kvGateway           *kvModule.KVGateway
+	s3Gateway           *s3Module.S3Gateway
 }
 
-func NewGateway(confIn *common.Config, cors bool) *Gateway {
+func NewGateway(confIn *common.Config, debug bool) *Gateway {
 	conf := confIn
 	r := gin.New()
 	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		SkipPaths: []string{"/health"},
 	}))
 	r.Use(gin.Recovery())
-	if cors {
+
+	if debug {
 		openGatewayCors(r)
 	}
-	r.GET("/", func(c *gin.Context) {
-		// text and timestamp
-		timestamp := time.Now().Format(time.RFC3339)
-		c.String(http.StatusOK, "Combinator Service is running at %s.", timestamp)
-	})
 	// Health check endpoint, 不打印日志
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -67,6 +64,12 @@ func openGatewayCors(r *gin.Engine) {
 }
 
 func (gw *Gateway) Start(addr string) error {
+	gw.g.GET("/", func(c *gin.Context) {
+		// text and timestamp
+		timestamp := time.Now().Format(time.RFC3339)
+		c.String(http.StatusOK, "Combinator Service is running at %s. Serving for %d users", timestamp, len(gw.userCredentials))
+	})
+
 	err := gw.rdbGateway.Start()
 	if err != nil {
 		return err
@@ -83,52 +86,4 @@ func (gw *Gateway) Start(addr string) error {
 	}
 
 	return gw.g.Run(addr)
-}
-
-// Reload 重新加载配置
-func (gw *Gateway) Reload(confIn *common.Config) error {
-	conf := confIn
-
-	// 重新加载 RDB Gateway
-	if err := gw.rdbGateway.Reload(conf.Rdb); err != nil {
-		return err
-	}
-
-	// 重新加载 KV Gateway
-	if err := gw.kvGateway.Reload(conf.Kv); err != nil {
-		return err
-	}
-
-	// 重新加载 S3 Gateway
-	if err := gw.s3Gateway.Reload(conf.S3); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// API 监听
-func (gw *Gateway) SetupReloadAPI(reloadChan chan<- *common.Config) {
-	gw.g.POST("/reload", func(c *gin.Context) {
-		if c.Request.Method != http.MethodPost {
-			c.JSON(405, gin.H{"error": "Method not allowed"})
-			return
-		}
-
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Failed to read body"})
-			return
-		}
-
-		var config common.Config
-		if err := json.Unmarshal(body, &config); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid JSON"})
-			return
-		}
-
-		common.Logger.Infof("Received reload request via API...")
-		reloadChan <- &config
-		c.String(200, "Config Reloaded")
-	})
 }

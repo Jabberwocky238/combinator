@@ -13,6 +13,8 @@ RUN go mod download
 # 复制源代码
 COPY . .
 
+ENV GIN_MODE=release
+
 # 构建二进制文件（生产模式，包含所有功能）
 RUN make build-prod
 

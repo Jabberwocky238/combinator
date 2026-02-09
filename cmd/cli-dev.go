@@ -109,11 +109,10 @@ func runDev(cmd *cobra.Command, args []string) {
 
 	// 转换所有 KV 为内存模式
 	for i := range config.Kv {
-		memoryKV := common.KVConfig{
+		realConfig.Kv = append(realConfig.Kv, common.KVConfig{
 			ID:  config.Kv[i],
 			URL: "memory://",
-		}
-		realConfig.Kv = append(realConfig.Kv, memoryKV)
+		})
 		fmt.Printf("  ✓ KV[%s] -> %s\n", config.Kv[i], "memory://")
 	}
 
@@ -132,7 +131,7 @@ func runDev(cmd *cobra.Command, args []string) {
 			URL: "local://" + s3Path,
 		}
 		realConfig.S3 = append(realConfig.S3, localS3)
-		fmt.Printf("  ⚠️  S3[%s] is not supported in dev mode and will be ignored\n", config.S3[i])
+		fmt.Printf("  ✓ S3[%s] -> %s\n", config.S3[i], s3Path)
 	}
 
 	// 启动网关

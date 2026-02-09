@@ -3,6 +3,7 @@ package rdb
 import (
 	"fmt"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -97,8 +98,10 @@ func parseSQLiteURL(dbType, rawInner string) (*ParsedRDBURL, error) {
 
 	// Handle file path
 	// Windows 路径需要转换反斜杠为正斜杠
-	path := strings.ReplaceAll(rawInner, "\\", "/")
-	parsed.Path = path
+	if runtime.GOOS == "windows" {
+		rawInner = strings.ReplaceAll(rawInner, "\\", "/")
+	}
+	parsed.Path = rawInner
 
 	return parsed, nil
 }

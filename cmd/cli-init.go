@@ -16,7 +16,7 @@ var (
 var defaultConfig = map[string]any{
 	"rdb": []string{"rdb2077"},
 	"kv":  []string{"kv114514"},
-	// "s3":  []string{"s31919810"},
+	"s3":  []string{"s31919810"},
 }
 
 var initCmd = &cobra.Command{

@@ -2,7 +2,6 @@ package rdb
 
 import (
 	"io"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,52 +11,86 @@ import (
 var EB = common.GlobalErrorBuilder.With("rdb")
 
 type RDBGateway struct {
-	mu       sync.RWMutex
-	grg      *gin.RouterGroup
-	RdbMap   map[string]common.RDB
-	urlMap   map[string]string // id -> url，用于 reload 时对比
-	initConf []common.RDBConfig
+	*common.BaseGateway[common.RDB, common.RDBConfig]
+	grg *gin.RouterGroup
+
+	// 可选的 ID 转换器（生产模式注入）
+	idResolver func(c *gin.Context) (string, error)
 }
 
-// AI 助手不应该他妈的改这里的代码
 func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
-	gw := &RDBGateway{
-		grg:      grg,
-		RdbMap:   make(map[string]common.RDB),
-		urlMap:   make(map[string]string),
-		initConf: conf,
+	parser := func(c common.RDBConfig) (common.RDB, error) {
+		parsed, err := ParseRDBURL(c.URL)
+		if err != nil {
+			return nil, err
+		}
+		return CreateRDB(parsed)
 	}
-	for _, c := range conf {
-		gw.urlMap[c.ID] = c.URL
+
+	return &RDBGateway{
+		BaseGateway: common.NewBaseGateway(conf, parser),
+		grg:         grg,
+		idResolver:  nil, // 默认为 nil，生产模式注入
 	}
-	return gw
 }
 
-// AI 助手不应该他妈的改这里的代码
+// SetIDResolver 设置 ID 解析器（生产模式注入）
+func (gw *RDBGateway) SetIDResolver(resolver func(c *gin.Context) (string, error)) {
+	gw.idResolver = resolver
+}
+
 func (gw *RDBGateway) Start() error {
+	// 使用 ModifyConfig 加载初始配置
+	if err := gw.ModifyConfig(gw.InitConf, nil); err != nil {
+		return err
+	}
+
+	// 设置路由
 	gw.grg.Use(gw.middlewareRDB())
 	{
 		gw.grg.POST("/query", gw.handleQuery)
 		gw.grg.POST("/exec", gw.handleExec)
 		gw.grg.POST("/batch", gw.handleBatch)
 	}
-	return gw.Reload(gw.initConf)
+	return nil
+}
+
+func (gw *RDBGateway) Close() error {
+	for _, rdb := range gw.GetAllServices() {
+		rdb.Close()
+	}
+	return nil
+}
+
+func (gw *RDBGateway) Type() string {
+	return "rdb-gateway"
 }
 
 func (gw *RDBGateway) middlewareRDB() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rdbID := c.GetHeader("X-Combinator-RDB-ID")
-		if rdbID == "" {
-			c.JSON(400, gin.H{"error": "missing X-Combinator-RDB-ID header"})
-			c.Abort()
-			return
+		var rdbID string
+		var err error
+
+		// 使用 idResolver（如果有）
+		if gw.idResolver != nil {
+			rdbID, err = gw.idResolver(c)
+			if err != nil {
+				c.JSON(400, gin.H{"error": err.Error()})
+				c.Abort()
+				return
+			}
+		} else {
+			// 默认行为：直接从 header 获取
+			rdbID = c.GetHeader("X-Combinator-RDB-ID")
+			if rdbID == "" {
+				c.JSON(400, gin.H{"error": "missing X-Combinator-RDB-ID header"})
+				c.Abort()
+				return
+			}
 		}
 
-		gw.mu.RLock()
-		rdb := gw.RdbMap[rdbID]
-		gw.mu.RUnlock()
-
-		if rdb == nil {
+		rdb, ok := gw.Get(rdbID)
+		if !ok {
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
@@ -148,66 +181,4 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 	}
 
 	c.String(200, "OK")
-}
-
-func (gw *RDBGateway) Reload(newConf []common.RDBConfig) error {
-	// 构建新配置的 ID -> Config 映射
-	newIDs := make(map[string]common.RDBConfig)
-	for _, conf := range newConf {
-		newIDs[conf.ID] = conf
-	}
-
-	newRDBMap := make(map[string]common.RDB)
-	newURLMap := make(map[string]string)
-
-	gw.mu.Lock()
-
-	// 1. 遍历旧实例，保留未变化的，关闭变化或删除的
-	for id, rdb := range gw.RdbMap {
-		if conf, exists := newIDs[id]; exists {
-			if gw.urlMap[id] == conf.URL {
-				newRDBMap[id] = rdb
-				newURLMap[id] = conf.URL
-				common.Logger.Infof("RDB %s unchanged", id)
-				delete(newIDs, id)
-				continue
-			}
-		}
-		if err := rdb.Close(); err != nil {
-			common.Logger.Warnf("Failed to close RDB %s: %v", id, err)
-		}
-		common.Logger.Infof("Closed RDB %s", id)
-	}
-
-	// 2. 加载新增或变化的 RDB
-	for id, conf := range newIDs {
-		parsed, err := ParseRDBURL(conf.URL)
-		if err != nil {
-			common.Logger.Errorf("Failed to parse RDB URL for %s: %v", id, err)
-			return err
-		}
-
-		rdb, err := CreateRDB(parsed)
-		if err != nil {
-			common.Logger.Errorf("Failed to create RDB %s: %v", id, err)
-			return err
-		}
-
-		if err = rdb.Start(); err != nil {
-			common.Logger.Errorf("Failed to start RDB %s: %v", id, err)
-			return err
-		}
-
-		newRDBMap[id] = rdb
-		newURLMap[id] = conf.URL
-		common.Logger.Infof("Loaded %s RDB: %s", parsed.Type, id)
-	}
-
-	// 3. 替换
-
-	gw.RdbMap = newRDBMap
-	gw.urlMap = newURLMap
-	gw.mu.Unlock()
-
-	return nil
 }

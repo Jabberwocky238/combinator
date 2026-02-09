@@ -1,4 +1,4 @@
-package combinator
+package common
 
 type Config struct {
 	Rdb []RDBConfig `json:"rdb"`
@@ -22,6 +22,18 @@ type S3Config struct {
 	ID       string `json:"id"`
 	URL      string `json:"url"`
 	Metadata any    `json:"metadata,omitempty"`
+}
+
+func (c RDBConfig) GetID() string {
+	return c.ID
+}
+
+func (c KVConfig) GetID() string {
+	return c.ID
+}
+
+func (c S3Config) GetID() string {
+	return c.ID
 }
 
 type DevConfig struct {

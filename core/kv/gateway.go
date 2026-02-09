@@ -1,7 +1,6 @@
 package kv
 
 import (
-	"encoding/json"
 	"io"
 	"strings"
 	"time"
@@ -13,46 +12,31 @@ import (
 )
 
 type KVGateway struct {
-	grg    *gin.RouterGroup
-	KvConf []common.KVConfig
-	KvMap  map[string]common.KV
+	*common.BaseGateway[common.KV, common.KVConfig]
+	grg *gin.RouterGroup
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.KVConfig) *KVGateway {
+	parser := func(c common.KVConfig) (common.KV, error) {
+		parsed, err := ParseKVURL(c.URL)
+		if err != nil {
+			return nil, err
+		}
+		return CreateKV(parsed)
+	}
+
 	return &KVGateway{
-		grg:    grg,
-		KvConf: conf,
-		KvMap:  make(map[string]common.KV),
+		BaseGateway: common.NewBaseGateway(conf, parser),
+		grg:         grg,
 	}
-}
-
-func (gw *KVGateway) loadKVs() error {
-	for _, kvConf := range gw.KvConf {
-		parsed, err := ParseKVURL(kvConf.URL)
-		if err != nil {
-			common.Logger.Errorf("Failed to parse KV URL for %s: %v", kvConf.ID, err)
-			return err
-		}
-
-		// Use factory to create KV instance
-		kv, err := CreateKV(parsed)
-		if err != nil {
-			common.Logger.Errorf("Failed to create KV %s: %v", kvConf.ID, err)
-			return err
-		}
-
-		gw.KvMap[kvConf.ID] = kv
-
-		if err = kv.Start(); err != nil {
-			common.Logger.Errorf("Failed to start KV %s: %v", kvConf.ID, err)
-			return err
-		}
-		common.Logger.Infof("Loaded %s KV: %s", parsed.Type, kvConf.ID)
-	}
-	return nil
 }
 
 func (gw *KVGateway) Start() error {
+	// 使用 ModifyConfig 加载初始配置
+	if err := gw.ModifyConfig(gw.InitConf, nil); err != nil {
+		return err
+	}
+
 	// KV 路由组
 	gw.grg.Use(gw.middlewareKV())
 	{
@@ -61,7 +45,18 @@ func (gw *KVGateway) Start() error {
 		gw.grg.POST("/del", gw.handleDelete)
 	}
 
-	return gw.Reload(gw.KvConf)
+	return nil
+}
+
+func (gw *KVGateway) Close() error {
+	for _, kv := range gw.GetAllServices() {
+		kv.Close()
+	}
+	return nil
+}
+
+func (gw *KVGateway) Type() string {
+	return "kv-gateway"
 }
 
 func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
@@ -81,8 +76,8 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 		}
 
 		// 获取 KV 实例
-		kv := gw.KvMap[kvID]
-		if kv == nil {
+		kv, ok := gw.Get(kvID)
+		if !ok {
 			c.JSON(400, gin.H{"error": "invalid KV ID"})
 			c.Abort()
 			return
@@ -96,16 +91,14 @@ func (gw *KVGateway) middlewareKV() gin.HandlerFunc {
 		if optionsStr != "" {
 			switch {
 			case strings.HasSuffix(pathname, "/set"):
-				var setOpts models.KVSetOptions
-				if err := json.Unmarshal([]byte(optionsStr), &setOpts); err == nil {
-					c.Set("kv_set_options", &setOpts)
+				setOpts := parseKVSetOptions(optionsStr)
+				if setOpts != nil {
+					c.Set("kv_set_options", setOpts)
 				}
 			case strings.HasSuffix(pathname, "/del"):
-				var delOpts models.KVDelOptions
-				if err := json.Unmarshal([]byte(optionsStr), &delOpts); err == nil {
-					c.Set("kv_del_options", &delOpts)
-					// 如果启用 CAS，标记需要读取请求体
-					c.Set("kv_del_cas", delOpts.CAS)
+				delOpts := parseKVDelOptions(optionsStr)
+				if delOpts != nil {
+					c.Set("kv_del_options", delOpts)
 				}
 			}
 		}
@@ -181,77 +174,6 @@ func (gw *KVGateway) handleDelete(c *gin.Context) {
 	}
 
 	c.String(200, "OK")
-}
-
-// Reload 重新加载 KV 配置
-func (gw *KVGateway) Reload(newConf []common.KVConfig) error {
-	// 构建新配置的 ID 集合
-	newIDs := make(map[string]common.KVConfig)
-	for _, conf := range newConf {
-		newIDs[conf.ID] = conf
-	}
-
-	// 创建新的 KV map
-	newKVMap := make(map[string]common.KV)
-
-	// 1. 保留未变化的 KV
-	for id, kv := range gw.KvMap {
-		if newConf, exists := newIDs[id]; exists {
-			// 检查配置是否变化
-			oldConf := gw.findConfigByID(id)
-			if oldConf != nil && oldConf.URL == newConf.URL {
-				// 配置未变化，保留
-				newKVMap[id] = kv
-				common.Logger.Infof("KV %s unchanged, keeping connection", id)
-				delete(newIDs, id)
-				continue
-			}
-		}
-		// 配置变化或被删除，关闭旧连接
-		if err := kv.Close(); err != nil {
-			common.Logger.Warnf("Failed to close KV %s: %v", id, err)
-		}
-		common.Logger.Infof("Closed KV %s", id)
-	}
-
-	// 2. 加载新增或变化的 KV
-	for id, conf := range newIDs {
-		parsed, err := ParseKVURL(conf.URL)
-		if err != nil {
-			common.Logger.Errorf("Failed to parse KV URL for %s: %v", id, err)
-			return err
-		}
-
-		kv, err := CreateKV(parsed)
-		if err != nil {
-			common.Logger.Errorf("Failed to create KV %s: %v", id, err)
-			return err
-		}
-
-		if err = kv.Start(); err != nil {
-			common.Logger.Errorf("Failed to start KV %s: %v", id, err)
-			return err
-		}
-
-		newKVMap[id] = kv
-		common.Logger.Infof("Loaded %s KV: %s", parsed.Type, id)
-	}
-
-	// 3. 更新配置和 map
-	gw.KvMap = newKVMap
-	gw.KvConf = newConf
-
-	return nil
-}
-
-// findConfigByID 查找配置
-func (gw *KVGateway) findConfigByID(id string) *common.KVConfig {
-	for _, conf := range gw.KvConf {
-		if conf.ID == id {
-			return &conf
-		}
-	}
-	return nil
 }
 
 // parseKVSetOptions 解析 Set 选项

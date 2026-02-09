@@ -10,7 +10,8 @@ import (
 )
 
 type GlobalConfig struct {
-	UserUID string `json:"useruid"`
+	UserUID string `json:"uid"`
+	UserSK  string `json:"sk,omitempty"`
 }
 
 func getConfigDir() (string, error) {
@@ -128,11 +129,13 @@ func runConfigSet(cmd *cobra.Command, args []string) {
 	}
 
 	switch key {
-	case "useruid":
+	case "uid":
 		config.UserUID = value
+	case "sk":
+		config.UserSK = value
 	default:
 		fmt.Printf("未知的配置项: %s\n", key)
-		fmt.Println("可用配置项: useruid")
+		fmt.Println("可用配置项: uid, sk")
 		os.Exit(1)
 	}
 

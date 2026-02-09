@@ -89,6 +89,7 @@ type ServiceInfo struct {
 type ServiceListResult struct {
 	RDB []ServiceInfo `json:"rdb"`
 	KV  []ServiceInfo `json:"kv"`
+	S3  []ServiceInfo `json:"s3"`
 }
 
 func (gw *Gateway) handleRPCMethod(method string, params json.RawMessage) (any, *RPCError) {
@@ -106,19 +107,27 @@ func (gw *Gateway) handleServiceList() (*ServiceListResult, *RPCError) {
 	result := &ServiceListResult{
 		RDB: make([]ServiceInfo, 0),
 		KV:  make([]ServiceInfo, 0),
+		S3:  make([]ServiceInfo, 0),
 	}
 
-	for id, rdb := range gw.rdbGateway.RdbMap {
+	for id, rdb := range gw.rdbGateway.GetAllServices() {
 		result.RDB = append(result.RDB, ServiceInfo{
 			ID:   id,
 			Type: rdb.Type(),
 		})
 	}
 
-	for id, kv := range gw.kvGateway.KvMap {
+	for id, kv := range gw.kvGateway.GetAllServices() {
 		result.KV = append(result.KV, ServiceInfo{
 			ID:   id,
 			Type: kv.Type(),
+		})
+	}
+
+	for id, s3 := range gw.s3Gateway.GetAllServices() {
+		result.S3 = append(result.S3, ServiceInfo{
+			ID:   id,
+			Type: s3.Type(),
 		})
 	}
 

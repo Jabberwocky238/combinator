@@ -1,4 +1,4 @@
-package combinator
+package common
 
 import (
 	"io"

@@ -14,22 +14,28 @@ import (
 var ConditionalS3StaticHandler func(map[string]common.S3) func(c *gin.Context)
 
 type S3Gateway struct {
-	grg    *gin.RouterGroup
-	S3Conf []common.S3Config
-	S3Map  map[string]common.S3
+	*common.BaseGateway[common.S3, common.S3Config]
+	grg *gin.RouterGroup
 }
 
 func NewGateway(grg *gin.RouterGroup, conf []common.S3Config) *S3Gateway {
+	parser := func(c common.S3Config) (common.S3, error) {
+		parsed, err := ParseS3URL(c.URL)
+		if err != nil {
+			return nil, err
+		}
+		return CreateS3(parsed)
+	}
+
 	return &S3Gateway{
-		grg:    grg,
-		S3Conf: conf,
-		S3Map:  make(map[string]common.S3),
+		BaseGateway: common.NewBaseGateway[common.S3, common.S3Config](conf, parser),
+		grg:         grg,
 	}
 }
 
 func (gw *S3Gateway) Start() error {
-	err := gw.Reload(gw.S3Conf)
-	if err != nil {
+	// 使用 ModifyConfig 加载初始配置
+	if err := gw.ModifyConfig(gw.InitConf, nil); err != nil {
 		return err
 	}
 
@@ -48,10 +54,21 @@ func (gw *S3Gateway) Start() error {
 
 	// 特殊路由：直接访问静态资源，不需要 middlewareS3
 	if ConditionalS3StaticHandler != nil {
-		gw.grg.GET("/-/:s3_id/*key", ConditionalS3StaticHandler(gw.S3Map))
+		gw.grg.GET("/-/:s3_id/*key", ConditionalS3StaticHandler(gw.GetAllServices()))
 	}
 
 	return nil
+}
+
+func (gw *S3Gateway) Close() error {
+	for _, s3 := range gw.GetAllServices() {
+		s3.Close()
+	}
+	return nil
+}
+
+func (gw *S3Gateway) Type() string {
+	return "s3-gateway"
 }
 
 func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
@@ -64,8 +81,8 @@ func (gw *S3Gateway) middlewareS3() gin.HandlerFunc {
 		}
 
 		// 获取 S3 实例
-		s3 := gw.S3Map[s3ID]
-		if s3 == nil {
+		s3, ok := gw.Get(s3ID)
+		if !ok {
 			c.JSON(400, gin.H{"error": "invalid S3 ID"})
 			c.Abort()
 			return
@@ -320,64 +337,3 @@ func (gw *S3Gateway) handlePutPresignedURL(c *gin.Context) {
 }
 
 // Reload 重新加载 S3 配置
-func (gw *S3Gateway) Reload(newConf []common.S3Config) error {
-	newIDs := make(map[string]common.S3Config)
-	for _, conf := range newConf {
-		newIDs[conf.ID] = conf
-	}
-
-	newS3Map := make(map[string]common.S3)
-
-	// 保留未变化的 S3
-	for id, s3 := range gw.S3Map {
-		if newConf, exists := newIDs[id]; exists {
-			oldConf := gw.findConfigByID(id)
-			if oldConf != nil && oldConf.URL == newConf.URL {
-				newS3Map[id] = s3
-				common.Logger.Infof("S3 %s unchanged", id)
-				delete(newIDs, id)
-				continue
-			}
-		}
-		if err := s3.Close(); err != nil {
-			common.Logger.Warnf("Failed to close S3 %s: %v", id, err)
-		}
-		common.Logger.Infof("Closed S3 %s", id)
-	}
-
-	// 加载新增或变化的 S3
-	for id, conf := range newIDs {
-		parsed, err := ParseS3URL(conf.URL)
-		if err != nil {
-			common.Logger.Errorf("Failed to parse S3 URL for %s: %v", id, err)
-			return err
-		}
-
-		s3, err := CreateS3(parsed)
-		if err != nil {
-			common.Logger.Errorf("Failed to create S3 %s: %v", id, err)
-			return err
-		}
-
-		if err = s3.Start(); err != nil {
-			common.Logger.Errorf("Failed to start S3 %s: %v", id, err)
-			return err
-		}
-
-		newS3Map[id] = s3
-		common.Logger.Infof("Loaded %s S3: %s", parsed.Type, id)
-	}
-
-	gw.S3Map = newS3Map
-	gw.S3Conf = newConf
-	return nil
-}
-
-func (gw *S3Gateway) findConfigByID(id string) *common.S3Config {
-	for _, conf := range gw.S3Conf {
-		if conf.ID == id {
-			return &conf
-		}
-	}
-	return nil
-}

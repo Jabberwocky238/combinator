@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	common "jabberwocky238/combinator/core/common"
 	rdbModule "jabberwocky238/combinator/core/rdb"
 
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ var (
 	migrationDir    string
 	apiAddr         string
 	remoteMode      bool
+	globalConfig    *GlobalConfig
 )
 
 var migrateCmd = &cobra.Command{
@@ -47,20 +49,25 @@ func init() {
 
 func runMigrateRdb(cmd *cobra.Command, args []string) {
 	migrateRdbIndex = args[0]
+	var err error
 
 	// 处理 API 地址
 	if remoteMode {
-		globalConfig, err := loadGlobalConfig()
+		globalConfig, err = loadGlobalConfig()
 		if err != nil {
 			fmt.Printf("读取全局配置失败: %v\n", err)
-			fmt.Println("请先运行 combinator config init && combinator config set useruid <uid>")
+			fmt.Println("请先运行 combinator config init && combinator config set uid <uid>")
 			return
 		}
 		if globalConfig.UserUID == "" {
-			fmt.Println("全局配置中未设置 useruid，请运行 combinator config set useruid <uid>")
+			fmt.Println("全局配置中未设置 uid，请运行 combinator config set uid <uid>")
 			return
 		}
-		apiAddr = fmt.Sprintf("https://%s.combinator.app238.com", globalConfig.UserUID)
+		if globalConfig.UserSK == "" {
+			fmt.Println("全局配置中未设置 sk，请运行 combinator config set sk <sk>")
+			return
+		}
+		apiAddr = "https://combinator.app238.com"
 	} else {
 		apiAddr = "http://localhost:8899"
 	}
@@ -213,11 +220,15 @@ func executeSQL(sql string) error {
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBodyBytes))
+	req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
 	req.Header.Set("X-Combinator-RDB-ID", migrateRdbIndex)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -248,6 +259,8 @@ func querySQL(sql string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBody.Bytes()))
+	req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
 	req.Header.Set("X-Combinator-RDB-ID", migrateRdbIndex)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -266,4 +279,3 @@ func querySQL(sql string) (string, error) {
 	}
 	return string(body), nil
 }
-
