@@ -13,10 +13,10 @@ else
 endif
 
 dev:
-	go run -tags=$(BUILD_TAGS) ./cmd dev
+	go run -tags=dev,$(BUILD_TAGS) ./cmd dev
 
 build-dev:
-	go build -tags=$(BUILD_TAGS) -o bin/dev$(SUFFIX) ./cmd
+	go build -tags=dev,$(BUILD_TAGS) -o bin/dev$(SUFFIX) ./cmd
 
 build-prod:
 	go build -tags=prod -o bin/combinator$(SUFFIX) ./cmd

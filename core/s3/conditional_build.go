@@ -1,5 +1,5 @@
-//go:build !prod
-// +build !prod
+//go:build dev
+// +build dev
 
 // WARNING: dangerous endpoint should not be exposed in production environment.
 
