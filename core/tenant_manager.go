@@ -45,6 +45,7 @@ type TenantInfo struct {
 // MultiTenantManager 多租户管理器
 type MultiTenantManager struct {
 	ctx        context.Context
+	ig         *gin.Engine
 	mu         sync.RWMutex
 	tenants    map[string]*TenantInfo // UID -> TenantInfo
 	rdbGateway *rdbModule.RDBGateway
@@ -60,6 +61,7 @@ func NewMultiTenantManager(
 	kvGateway *kvModule.KVGateway,
 	s3Gateway *s3Module.S3Gateway,
 ) *MultiTenantManager {
+	ig := gin.Default()
 	t := MultiTenantManager{
 		ctx:        ctx,
 		tenants:    make(map[string]*TenantInfo),
@@ -69,11 +71,40 @@ func NewMultiTenantManager(
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		ig: ig,
 	}
+	ig.POST("/webhook", func(ctx *gin.Context) {
+		var req struct {
+			UserUID      string `json:"user_uid"`
+			ResourceID   string `json:"resource_id"`
+			ResourceType string `json:"resource_type"` // "rdb", "kv", "s3"
+		}
+		if err := ctx.ShouldBindJSON(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+		err := t.DeleteTenantResource(req.UserUID, req.ResourceType, req.ResourceID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "success"})
+	})
+	// Health check endpoint, 不打印日志
+	ig.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "combinator",
+		})
+	})
 	rdbGateway.TenantHandler = t.EnsureResourceExistsMiddleware("rdb", "rdb_id")
 	kvGateway.TenantHandler = t.EnsureResourceExistsMiddleware("kv", "kv_id")
 	s3Gateway.TenantHandler = t.EnsureResourceExistsMiddleware("s3", "s3_id")
 	return &t
+}
+
+func (m *MultiTenantManager) Start(addr string) error {
+	return m.ig.Run(addr)
 }
 
 // GetTenant 获取租户信息

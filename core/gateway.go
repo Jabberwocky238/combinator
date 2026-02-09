@@ -15,7 +15,6 @@ import (
 
 type Gateway struct {
 	g             *gin.Engine
-	ig            *gin.Engine
 	ctx           context.Context
 	rdbGateway    *rdbModule.RDBGateway
 	kvGateway     *kvModule.KVGateway
@@ -25,53 +24,22 @@ type Gateway struct {
 
 func NewGateway(confIn *common.Config, debug bool) *Gateway {
 	r := gin.New()
-	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{"/health"},
-	}))
 	r.Use(gin.Recovery())
-	// Health check endpoint, 不打印日志
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"service": "combinator",
-		})
-	})
-
 	rdbGateway := rdbModule.NewGateway(r.Group("/rdb"), confIn.Rdb)
 	kvGateway := kvModule.NewGateway(r.Group("/kv"), confIn.Kv)
 	s3Gateway := s3Module.NewGateway(r.Group("/s3"), confIn.S3)
 
 	var tenantManager *MultiTenantManager
 	var ctx context.Context = context.Background()
-	var ig *gin.Engine
 	if debug {
 		openGatewayCors(r)
 	} else {
 		// 创建多租户管理器
 		tenantManager = NewMultiTenantManager(ctx, rdbGateway, kvGateway, s3Gateway)
-		ig = gin.New() // 内部使用的 Engine，不对外暴露
-		ig.POST("/webhook", func(ctx *gin.Context) {
-			var req struct {
-				UserUID      string `json:"user_uid"`
-				ResourceID   string `json:"resource_id"`
-				ResourceType string `json:"resource_type"` // "rdb", "kv", "s3"
-			}
-			if err := ctx.ShouldBindJSON(&req); err != nil {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-				return
-			}
-			err := tenantManager.DeleteTenantResource(req.UserUID, req.ResourceType, req.ResourceID)
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			ctx.JSON(http.StatusOK, gin.H{"status": "success"})
-		})
 	}
 
 	return &Gateway{
 		g:             r,
-		ig:            ig,
 		ctx:           ctx,
 		rdbGateway:    rdbGateway,
 		kvGateway:     kvGateway,
@@ -97,6 +65,7 @@ func openGatewayCors(r *gin.Engine) {
 func (gw *Gateway) Start(addr string) error {
 	// 启用多租户中间件
 	if gw.tenantManager != nil {
+		go gw.tenantManager.Start("0.0.0.0:8890") // 启动多租户管理
 		gw.g.Use(gw.tenantManager.Middleware())
 	}
 
@@ -126,15 +95,6 @@ func (gw *Gateway) Start(addr string) error {
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		if gw.ig != nil {
-			err := gw.ig.Run("0.0.0.0:8890")
-			if err != nil {
-				panic(err)
-			}
-		}
-	}()
 
 	return gw.g.Run(addr)
 }
