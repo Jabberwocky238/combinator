@@ -84,6 +84,10 @@ func (gw *RDBGateway) middlewareCatchRDB() gin.HandlerFunc {
 		rdbID := c.MustGet("rdb_id").(string)
 		rdb, ok := gw.Get(rdbID)
 		if !ok {
+			tenantMode, _ := c.Get("tenant_mode")
+			tenantUID, _ := c.Get("tenant_uid")
+			common.Logger.Warnf("Invalid RDB ID requested: %s (tenant_mode=%v, tenant_uid=%v)",
+				rdbID, tenantMode, tenantUID)
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
 			return
