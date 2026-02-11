@@ -25,17 +25,25 @@ type Gateway struct {
 func NewGateway(confIn *common.Config, debug bool) *Gateway {
 	r := gin.New()
 	r.Use(gin.Recovery())
-	rdbGateway := rdbModule.NewGateway(r.Group("/rdb"), confIn.Rdb)
-	kvGateway := kvModule.NewGateway(r.Group("/kv"), confIn.Kv)
-	s3Gateway := s3Module.NewGateway(r.Group("/s3"), confIn.S3)
 
 	var tenantManager *MultiTenantManager
 	var ctx context.Context = context.Background()
 	if debug {
 		openGatewayCors(r)
 	} else {
-		// 创建多租户管理器
-		tenantManager = NewMultiTenantManager(ctx, rdbGateway, kvGateway, s3Gateway)
+		// 创建多租户管理器并设置 TenantHandler
+		tenantManager = NewMultiTenantManager(ctx)
+		// 在路由组上注册全局中间件（必须在 gateway.Start() 之前）
+		r.Use(tenantManager.Middleware())
+	}
+
+	// 创建路由组
+	rdbGateway := rdbModule.NewGateway(r.Group("/rdb"), confIn.Rdb)
+	kvGateway := kvModule.NewGateway(r.Group("/kv"), confIn.Kv)
+	s3Gateway := s3Module.NewGateway(r.Group("/s3"), confIn.S3)
+
+	if tenantManager != nil {
+		tenantManager.SetupMiddleware(rdbGateway, kvGateway, s3Gateway)
 	}
 
 	return &Gateway{
@@ -63,10 +71,9 @@ func openGatewayCors(r *gin.Engine) {
 }
 
 func (gw *Gateway) Start(addr string) error {
-	// 启用多租户中间件
+	// 启动多租户管理器的独立服务
 	if gw.tenantManager != nil {
-		go gw.tenantManager.Start("0.0.0.0:8890") // 启动多租户管理
-		gw.g.Use(gw.tenantManager.Middleware())
+		go gw.tenantManager.Start("0.0.0.0:8890")
 	}
 
 	gw.g.GET("/", func(c *gin.Context) {

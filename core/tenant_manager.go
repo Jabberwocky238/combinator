@@ -56,19 +56,11 @@ type MultiTenantManager struct {
 }
 
 // NewMultiTenantManager 创建多租户管理器
-func NewMultiTenantManager(
-	ctx context.Context,
-	rdbGateway *rdbModule.RDBGateway,
-	kvGateway *kvModule.KVGateway,
-	s3Gateway *s3Module.S3Gateway,
-) *MultiTenantManager {
+func NewMultiTenantManager(ctx context.Context) *MultiTenantManager {
 	ig := gin.New()
 	t := MultiTenantManager{
-		ctx:        ctx,
-		tenants:    make(map[string]*TenantInfo),
-		rdbGateway: rdbGateway,
-		kvGateway:  kvGateway,
-		s3Gateway:  s3Gateway,
+		ctx:     ctx,
+		tenants: make(map[string]*TenantInfo),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -102,10 +94,16 @@ func NewMultiTenantManager(
 			"service": "combinator",
 		})
 	})
-	rdbGateway.TenantHandler = t.EnsureResourceExistsMiddleware("rdb", "rdb_id")
-	kvGateway.TenantHandler = t.EnsureResourceExistsMiddleware("kv", "kv_id")
-	s3Gateway.TenantHandler = t.EnsureResourceExistsMiddleware("s3", "s3_id")
 	return &t
+}
+
+func (m *MultiTenantManager) SetupMiddleware(rdb *rdbModule.RDBGateway, kv *kvModule.KVGateway, s3 *s3Module.S3Gateway) {
+	m.rdbGateway = rdb
+	m.kvGateway = kv
+	m.s3Gateway = s3
+	m.rdbGateway.TenantHandler = m.EnsureResourceExistsMiddleware("rdb", "rdb_id")
+	m.kvGateway.TenantHandler = m.EnsureResourceExistsMiddleware("kv", "kv_id")
+	m.s3Gateway.TenantHandler = m.EnsureResourceExistsMiddleware("s3", "s3_id")
 }
 
 func (m *MultiTenantManager) Start(addr string) error {
@@ -237,9 +235,11 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		signature := c.GetHeader("X-Raysail-Signature")
 		uid := c.GetHeader("X-Raysail-UID")
+		log.Printf("Tenant middleware called: uid=%s, signature=%s, path=%s", uid, signature, c.Request.URL.Path)
 		c.Set("tenant_mode", false)
 		// 如果没有提供 UID，跳过多租户处理
 		if uid == "" {
+			log.Printf("No UID provided, skipping tenant processing")
 			c.Next()
 			return
 		}
