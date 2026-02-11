@@ -227,8 +227,10 @@ func executeSQL(sql string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBodyBytes))
-	req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
+	if globalConfig != nil {
+		req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBodyBytes))
+		req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
+	}
 	req.Header.Set("X-Combinator-RDB-ID", migrateRdbIndex)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -259,8 +261,10 @@ func querySQL(sql string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBody.Bytes()))
-	req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
+	if globalConfig != nil {
+		req.Header.Set("X-Raysail-Signature", common.GenerateHMACSignature(globalConfig.UserSK, reqBody.Bytes()))
+		req.Header.Set("X-Raysail-UID", globalConfig.UserUID)
+	}
 	req.Header.Set("X-Combinator-RDB-ID", migrateRdbIndex)
 
 	resp, err := http.DefaultClient.Do(req)

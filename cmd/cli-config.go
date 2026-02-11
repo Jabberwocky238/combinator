@@ -11,7 +11,7 @@ import (
 
 type GlobalConfig struct {
 	UserUID string `json:"uid"`
-	UserSK  string `json:"sk,omitempty"`
+	UserSK  string `json:"sk"`
 }
 
 func getConfigDir() (string, error) {
