@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -61,7 +62,7 @@ func NewMultiTenantManager(
 	kvGateway *kvModule.KVGateway,
 	s3Gateway *s3Module.S3Gateway,
 ) *MultiTenantManager {
-	ig := gin.Default()
+	ig := gin.New()
 	t := MultiTenantManager{
 		ctx:        ctx,
 		tenants:    make(map[string]*TenantInfo),
@@ -90,6 +91,10 @@ func NewMultiTenantManager(
 		}
 		ctx.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
+	// 过滤 /health 请求的日志
+	ig.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		SkipPaths: []string{"/health"},
+	}))
 	// Health check endpoint, 不打印日志
 	ig.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -251,10 +256,12 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 		// 检查租户是否存在
 		tenant, ok := m.GetTenant(uid)
 		if !ok {
+			log.Printf("Tenant %s not found in cache, querying backend", uid)
 			// 租户不存在，查询后台
 			var err error
 			tenant, err = m.QueryBackend(uid)
 			if err != nil {
+				log.Printf("Failed to query backend for tenant %s: %v", uid, err)
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error": fmt.Sprintf("Failed to authenticate tenant: %v", err),
 				})
@@ -262,6 +269,7 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 				return
 			}
 
+			log.Printf("Tenant %s retrieved from backend with resources: %+v", uid, tenant.Resources)
 			// 保存租户信息
 			m.SetTenant(uid, tenant)
 		}

@@ -42,6 +42,8 @@ func (gw *KVGateway) Start() error {
 	gw.grg.Use(gw.middlewareKV())
 	if gw.TenantHandler != nil {
 		gw.grg.Use(gw.TenantHandler)
+	} else {
+		common.Logger.Warn("No tenant handler set for KVGateway, multi-tenancy features will be disabled")
 	}
 	gw.grg.Use(gw.middlewareCatchKV())
 	{

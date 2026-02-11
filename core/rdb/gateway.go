@@ -42,6 +42,8 @@ func (gw *RDBGateway) Start() error {
 	gw.grg.Use(gw.middlewareRDB())
 	if gw.TenantHandler != nil {
 		gw.grg.Use(gw.TenantHandler)
+	} else {
+		common.Logger.Warn("No tenant handler set for RDBGateway, multi-tenancy features will be disabled")
 	}
 	gw.grg.Use(gw.middlewareCatchRDB())
 	{
