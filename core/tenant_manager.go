@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	ControlPlaneURL = "http://control-plane.console.svc.cluster.local:9901"
+	ControlPlaneURL = "http://control-plane-inner.console.svc.cluster.local:9901"
 	CockroachDBHost = "cockroachdb-public.cockroachdb.svc.cluster.local"
 	CockroachDBPort = "26257"
 )
