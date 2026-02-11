@@ -174,10 +174,13 @@ func (m *MultiTenantManager) EnsureResourceExists(uid, resourceType, resourceID 
 			if err != nil {
 				return fmt.Errorf("failed to create RDB resource %s: %w", resourceID, err)
 			}
+			if err := resource.Start(); err != nil {
+				return fmt.Errorf("failed to start RDB resource %s: %w", resourceID, err)
+			}
 			if err := m.rdbGateway.Set(tnid, resource); err != nil {
 				return fmt.Errorf("failed to set RDB resource %s: %w", resourceID, err)
 			}
-			return fmt.Errorf("rdb resource %s does not exist and needs to be created", resourceID)
+			log.Printf("RDB resource %s created and started successfully", tnid)
 		}
 	case "kv":
 		if _, ok := m.kvGateway.Get(tnid); !ok {
