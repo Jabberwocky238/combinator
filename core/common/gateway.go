@@ -51,8 +51,15 @@ func NewBaseGateway[ServiceTy Service, ConfTy ConfigWithID](
 }
 
 // ParseAndCreate 解析配置并创建服务实例
-func (bg *BaseGateway[ServiceTy, ConfTy]) ParseAndCreate(conf ConfTy) (ServiceTy, error) {
-	return bg.parser(conf)
+func (bg *BaseGateway[ServiceTy, ConfTy]) ParseCreateRun(conf ConfTy) (ServiceTy, error) {
+	service, err := bg.parser(conf)
+	if err != nil {
+		return service, err
+	}
+	if err := service.Start(); err != nil {
+		return service, err
+	}
+	return service, nil
 }
 
 // Set 设置服务实例

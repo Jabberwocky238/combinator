@@ -168,14 +168,12 @@ func (m *MultiTenantManager) EnsureResourceExists(uid, resourceType, resourceID 
 		if _, ok := m.rdbGateway.Get(tnid); !ok {
 			dbname := fmt.Sprintf("db_%s", uid)
 			username := fmt.Sprintf("user_%s", uid)
+			schemaName := fmt.Sprintf("schema_%s", resourceID)
 			url := fmt.Sprintf("postgresql://%s@%s:%s/%s?sslmode=disable&search_path=%s",
-				username, CockroachDBHost, CockroachDBPort, dbname, resourceID)
-			resource, err := m.rdbGateway.ParseAndCreate(common.RDBConfig{ID: resourceID, URL: url})
+				username, CockroachDBHost, CockroachDBPort, dbname, schemaName)
+			resource, err := m.rdbGateway.ParseCreateRun(common.RDBConfig{ID: resourceID, URL: url})
 			if err != nil {
 				return fmt.Errorf("failed to create RDB resource %s: %w", resourceID, err)
-			}
-			if err := resource.Start(); err != nil {
-				return fmt.Errorf("failed to start RDB resource %s: %w", resourceID, err)
 			}
 			if err := m.rdbGateway.Set(tnid, resource); err != nil {
 				return fmt.Errorf("failed to set RDB resource %s: %w", resourceID, err)
@@ -184,7 +182,7 @@ func (m *MultiTenantManager) EnsureResourceExists(uid, resourceType, resourceID 
 		}
 	case "kv":
 		if _, ok := m.kvGateway.Get(tnid); !ok {
-			resource, err := m.kvGateway.ParseAndCreate(common.KVConfig{ID: resourceID})
+			resource, err := m.kvGateway.ParseCreateRun(common.KVConfig{ID: resourceID})
 			if err != nil {
 				return fmt.Errorf("failed to create KV resource %s: %w", resourceID, err)
 			}
