@@ -133,7 +133,7 @@ type QueryBackendResponse struct {
 
 // QueryBackend 查询后台获取租户信息
 func (m *MultiTenantManager) QueryBackend(uid string) (*TenantInfo, error) {
-	url := fmt.Sprintf("%s/combinator/retrieveSecretByID?user_id=%s", ControlPlaneURL, uid)
+	url := fmt.Sprintf("%s/api/combinator/retrieveSecretByID?user_id=%s", ControlPlaneURL, uid)
 
 	resp, err := m.httpClient.Get(url)
 	if err != nil {
