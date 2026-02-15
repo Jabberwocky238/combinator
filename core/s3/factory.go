@@ -7,7 +7,7 @@ import (
 )
 
 // S3Factory is a function that creates a S3 instance from a parsed URL
-type S3Factory func(*ParsedS3URL) (common.S3, error)
+type S3Factory func(*ParsedS3URL, *common.NamespacedLogger) (common.S3, error)
 
 var s3Factories = make(map[string]S3Factory)
 
@@ -17,10 +17,10 @@ func RegisterS3Factory(s3Type string, factory S3Factory) {
 }
 
 // CreateS3 creates a S3 instance based on the parsed URL
-func CreateS3(parsed *ParsedS3URL) (common.S3, error) {
+func CreateS3(parsed *ParsedS3URL, log *common.NamespacedLogger) (common.S3, error) {
 	factory, ok := s3Factories[parsed.Type]
 	if !ok {
 		return nil, fmt.Errorf("unsupported S3 type: %s", parsed.Type)
 	}
-	return factory(parsed)
+	return factory(parsed, log)
 }

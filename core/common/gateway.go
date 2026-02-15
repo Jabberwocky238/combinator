@@ -36,17 +36,20 @@ type BaseGateway[ServiceTy Service, ConfTy ConfigWithID] struct {
 	serviceMap map[string]ServiceTy
 	InitConf   []ConfTy
 	parser     func(ConfTy) (ServiceTy, error)
+	log        *NamespacedLogger
 }
 
 // NewBaseGateway 创建基础网关
 func NewBaseGateway[ServiceTy Service, ConfTy ConfigWithID](
 	initConf []ConfTy,
 	parser func(ConfTy) (ServiceTy, error),
+	log *NamespacedLogger,
 ) *BaseGateway[ServiceTy, ConfTy] {
 	return &BaseGateway[ServiceTy, ConfTy]{
 		serviceMap: make(map[string]ServiceTy),
 		InitConf:   initConf,
 		parser:     parser,
+		log:        log,
 	}
 }
 
@@ -100,7 +103,7 @@ func (bg *BaseGateway[ServiceTy, ConfTy]) ModifyConfig(incre []ConfTy, decre []s
 		if service, ok := bg.serviceMap[id]; ok {
 			service.Close()
 			delete(bg.serviceMap, id)
-			Logger.Infof("Deleted service: %s", id)
+			bg.log.Infof("Deleted service: %s", id)
 		}
 	}
 
@@ -109,22 +112,22 @@ func (bg *BaseGateway[ServiceTy, ConfTy]) ModifyConfig(incre []ConfTy, decre []s
 		// 如果id存在则跳过
 		id := conf.GetID()
 		if _, exists := bg.serviceMap[id]; exists {
-			Logger.Infof("Service %s already exists, skipping", id)
+			bg.log.Infof("Service %s already exists, skipping", id)
 			continue
 		}
 		service, err := bg.parser(conf)
 		if err != nil {
-			Logger.Errorf("Failed to create service %s: %v", id, err)
+			bg.log.Errorf("Failed to create service %s: %v", id, err)
 			continue
 		}
 
 		if err := service.Start(); err != nil {
-			Logger.Errorf("Failed to start service %s: %v", id, err)
+			bg.log.Errorf("Failed to start service %s: %v", id, err)
 			continue
 		}
 
 		bg.serviceMap[id] = service
-		Logger.Infof("Added service: %s (%s)", id, service.Type())
+		bg.log.Infof("Added service: %s (%s)", id, service.Type())
 	}
 
 	return nil

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -53,10 +52,11 @@ type MultiTenantManager struct {
 	kvGateway  *kvModule.KVGateway
 	s3Gateway  *s3Module.S3Gateway
 	httpClient *http.Client
+	log        *common.NamespacedLogger
 }
 
 // NewMultiTenantManager 创建多租户管理器
-func NewMultiTenantManager(ctx context.Context) *MultiTenantManager {
+func NewMultiTenantManager(ctx context.Context, log *common.NamespacedLogger) *MultiTenantManager {
 	ig := gin.New()
 	t := MultiTenantManager{
 		ctx:     ctx,
@@ -64,7 +64,8 @@ func NewMultiTenantManager(ctx context.Context) *MultiTenantManager {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		ig: ig,
+		ig:  ig,
+		log: log,
 	}
 	ig.POST("/webhook", func(ctx *gin.Context) {
 		var req struct {
@@ -178,7 +179,7 @@ func (m *MultiTenantManager) EnsureResourceExists(uid, resourceType, resourceID 
 			if err := m.rdbGateway.Set(tnid, resource); err != nil {
 				return fmt.Errorf("failed to set RDB resource %s: %w", resourceID, err)
 			}
-			log.Printf("RDB resource %s created and started successfully", tnid)
+			m.log.Infof("RDB resource %s created and started successfully", tnid)
 		}
 	case "kv":
 		if _, ok := m.kvGateway.Get(tnid); !ok {
@@ -236,11 +237,11 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		signature := c.GetHeader("X-Raysail-Signature")
 		uid := c.GetHeader("X-Raysail-UID")
-		log.Printf("Tenant middleware called: uid=%s, signature=%s, path=%s", uid, signature, c.Request.URL.Path)
+		m.log.Infof("Tenant middleware called: uid=%s, signature=%s, path=%s", uid, signature, c.Request.URL.Path)
 		c.Set("tenant_mode", false)
 		// 如果没有提供 UID，跳过多租户处理
 		if uid == "" {
-			log.Printf("No UID provided, skipping tenant processing")
+			m.log.Infof("No UID provided, skipping tenant processing")
 			c.Next()
 			return
 		}
@@ -257,12 +258,12 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 		// 检查租户是否存在
 		tenant, ok := m.GetTenant(uid)
 		if !ok {
-			log.Printf("Tenant %s not found in cache, querying backend", uid)
+			m.log.Infof("Tenant %s not found in cache, querying backend", uid)
 			// 租户不存在，查询后台
 			var err error
 			tenant, err = m.QueryBackend(uid)
 			if err != nil {
-				log.Printf("Failed to query backend for tenant %s: %v", uid, err)
+				m.log.Errorf("Failed to query backend for tenant %s: %v", uid, err)
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error": fmt.Sprintf("Failed to authenticate tenant: %v", err),
 				})
@@ -270,7 +271,7 @@ func (m *MultiTenantManager) Middleware() gin.HandlerFunc {
 				return
 			}
 
-			log.Printf("Tenant %s retrieved from backend with resources: %+v", uid, tenant.Resources)
+			m.log.Infof("Tenant %s retrieved from backend with resources: %+v", uid, tenant.Resources)
 			// 保存租户信息
 			m.SetTenant(uid, tenant)
 		}

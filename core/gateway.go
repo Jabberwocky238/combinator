@@ -23,6 +23,8 @@ type Gateway struct {
 }
 
 func NewGateway(confIn *common.Config, debug bool) *Gateway {
+	log := common.NewRootLogger()
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 
@@ -32,15 +34,15 @@ func NewGateway(confIn *common.Config, debug bool) *Gateway {
 		openGatewayCors(r)
 	} else {
 		// 创建多租户管理器并设置 TenantHandler
-		tenantManager = NewMultiTenantManager(ctx)
+		tenantManager = NewMultiTenantManager(ctx, log.With("tenant"))
 		// 在路由组上注册全局中间件（必须在 gateway.Start() 之前）
 		r.Use(tenantManager.Middleware())
 	}
 
 	// 创建路由组
-	rdbGateway := rdbModule.NewGateway(r.Group("/rdb"), confIn.Rdb)
-	kvGateway := kvModule.NewGateway(r.Group("/kv"), confIn.Kv)
-	s3Gateway := s3Module.NewGateway(r.Group("/s3"), confIn.S3)
+	rdbGateway := rdbModule.NewGateway(r.Group("/rdb"), confIn.Rdb, log.With("rdb"))
+	kvGateway := kvModule.NewGateway(r.Group("/kv"), confIn.Kv, log.With("kv"))
+	s3Gateway := s3Module.NewGateway(r.Group("/s3"), confIn.S3, log.With("s3"))
 
 	if tenantManager != nil {
 		tenantManager.SetupMiddleware(rdbGateway, kvGateway, s3Gateway)

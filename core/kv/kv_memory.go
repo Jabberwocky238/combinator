@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	RegisterKVFactory("memory", func(parsed *ParsedKVURL) (common.KV, error) {
+	RegisterKVFactory("memory", func(parsed *ParsedKVURL, log *common.NamespacedLogger) (common.KV, error) {
 		return NewMemoryKV(), nil
 	})
 }

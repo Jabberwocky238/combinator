@@ -7,22 +7,16 @@ import (
 	"fmt"
 	"io"
 
+	common "jabberwocky238/combinator/core/common"
+
 	sqlparser "github.com/jabberwocky238/sqlparser"
 )
-
-var ebcore = EB.With("core")
 
 type RDBCore struct {
 	db        *sql.DB
 	rdbType   string
 	reconnect func() error // reconnect callback function
-}
-
-func NewRDBCore(db *sql.DB, rdbType string) *RDBCore {
-	return &RDBCore{
-		db:      db,
-		rdbType: rdbType,
-	}
+	log       *common.NamespacedLogger
 }
 
 type SQLType string
@@ -35,17 +29,17 @@ var (
 )
 
 // 第一步：解析语句，判断类型（DQL/DML/DDL），并根据数据库类型应用 shim 转换
-func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, error) {
+func (r *RDBCore) parseStatement(stmt string) (sqlparser.Statement, SQLType, error) {
 	ast, err := sqlparser.Parse(stmt)
 	if err != nil {
-		return nil, SQL_TYPE_UNKNOWN, ebcore.Error("Statement parse failed: %v", err)
+		return nil, SQL_TYPE_UNKNOWN, r.log.NewError("Statement parse failed: %v", err)
 	}
 
 	// 新的 sqlparser 返回 AST，包含多个 statements
 	if len(ast.Statements) == 0 {
-		fmt.Printf("[WARN] Statement has no statements in AST\n")
+		r.log.Warnf("Statement has no statements in AST")
 	} else if len(ast.Statements) > 1 {
-		return nil, SQL_TYPE_UNKNOWN, ebcore.Error("multiple statements not supported")
+		return nil, SQL_TYPE_UNKNOWN, r.log.NewError("multiple statements not supported")
 	}
 
 	// 取第一个 statement
@@ -71,7 +65,7 @@ func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, 
 	// 根据数据库类型应用 shim
 	var transformedNode sqlparser.Statement = node
 	if sqlType == SQL_TYPE_DDL {
-		switch rdbType {
+		switch r.rdbType {
 		case "postgres":
 			transformedNode = ddlShimPostgres(node)
 		case "sqlite":
@@ -81,7 +75,7 @@ func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, 
 		}
 	} else if sqlType == SQL_TYPE_DML || sqlType == SQL_TYPE_DQL {
 		var newStmt string
-		switch rdbType {
+		switch r.rdbType {
 		case "postgres":
 			newStmt = shimPlaceholdersPostgres(stmt)
 		case "sqlite":
@@ -92,25 +86,25 @@ func parseStatement(stmt string, rdbType string) (sqlparser.Statement, SQLType, 
 		// 重新解析转换后的语句
 		newAst, err := sqlparser.Parse(newStmt)
 		if err != nil {
-			return nil, SQL_TYPE_UNKNOWN, ebcore.Error("Statement re-parse failed after shimming: %v", err)
+			return nil, SQL_TYPE_UNKNOWN, r.log.NewError("Statement re-parse failed after shimming: %v", err)
 		}
 		transformedNode = newAst.Statements[0]
 	} else {
-		fmt.Printf("[WARN] Statement type is unknown, no shim applied\n")
-		return nil, sqlType, ebcore.Error("unknown statement type: %T", node)
+		r.log.Warnf("Statement type is unknown, no shim applied")
+		return nil, sqlType, r.log.NewError("unknown statement type: %T", node)
 	}
 
-	fmt.Printf("[INFO] Statement: %s - %s\n", sqlType, transformedNode.String())
+	r.log.Infof("Statement: %s - %s", sqlType, transformedNode.String())
 	return transformedNode, sqlType, nil
 }
 
 // 第二步：解析语句（带日志）
-func parseStatements(statements []string, rdbType string) []sqlparser.Statement {
+func (r *RDBCore) parseStatements(statements []string) []sqlparser.Statement {
 	nodes := make([]sqlparser.Statement, 0, len(statements))
 	for i, stmt := range statements {
-		node, _, err := parseStatement(stmt, rdbType)
+		node, _, err := r.parseStatement(stmt)
 		if err != nil {
-			fmt.Printf("[ERROR] Failed to parse statement %d: %v\n", i+1, err)
+			r.log.Errorf("Failed to parse statement %d: %v", i+1, err)
 			continue
 		}
 		nodes = append(nodes, node)
@@ -119,9 +113,9 @@ func parseStatements(statements []string, rdbType string) []sqlparser.Statement 
 }
 
 // 第三步：在事务中执行所有语句
-func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any, rdbType string) error {
+func (r *RDBCore) executeInTransaction(nodes []sqlparser.Statement, args [][]any) error {
 	// 开启事务
-	tx, err := db.Begin()
+	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -130,7 +124,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 	for i, node := range nodes {
 		var err error
 		stmt := node.String()
-		fmt.Printf("[DEBUG] Statement %d: %s\n", i+1, stmt)
+		r.log.Debugf("Statement %d: %s", i+1, stmt)
 		switch node.(type) {
 		case *sqlparser.Select:
 			// DQL: 查询，输出 CSV（列头 + 数据）
@@ -165,7 +159,7 @@ func executeInTransaction(db *sql.DB, nodes []sqlparser.Statement, args [][]any,
 }
 
 func (r *RDBCore) Query(stmt string, args ...any) (io.ReadCloser, error) {
-	node, rdbType, err := parseStatement(stmt, r.rdbType)
+	node, rdbType, err := r.parseStatement(stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +228,7 @@ func (r *RDBCore) Query(stmt string, args ...any) (io.ReadCloser, error) {
 
 // Execute executes a DML/DDL statement with optional parameters
 func (r *RDBCore) Exec(stmt string, args ...any) error {
-	node, _, err := parseStatement(stmt, r.rdbType)
+	node, _, err := r.parseStatement(stmt)
 	if err != nil {
 		return err
 	}
@@ -249,7 +243,7 @@ func (r *RDBCore) Exec(stmt string, args ...any) error {
 
 func (r *RDBCore) Batch(stmts []string, args [][]any) error {
 	// 第二步：解析语句（带日志）
-	nodes := parseStatements(stmts, r.rdbType)
+	nodes := r.parseStatements(stmts)
 	// 第三步：在事务中执行所有语句，使用 buffer writer 收集输出
-	return executeInTransaction(r.db, nodes, args, r.rdbType)
+	return r.executeInTransaction(nodes, args)
 }

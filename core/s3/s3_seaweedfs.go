@@ -17,7 +17,7 @@ import (
 )
 
 func init() {
-	RegisterS3Factory("seaweedfs", func(parsed *ParsedS3URL) (common.S3, error) {
+	RegisterS3Factory("seaweedfs", func(parsed *ParsedS3URL, log *common.NamespacedLogger) (common.S3, error) {
 		return NewSeaweedFSS3(parsed)
 	})
 }

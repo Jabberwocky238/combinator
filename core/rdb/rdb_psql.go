@@ -14,24 +14,23 @@ import (
 )
 
 func init() {
-	RegisterRDBFactory("postgres", func(parsed *ParsedRDBURL) (common.RDB, error) {
-		return NewPsqlRDB(parsed.DSN), nil
+	RegisterRDBFactory("postgres", func(parsed *ParsedRDBURL, log *common.NamespacedLogger) (common.RDB, error) {
+		return NewPsqlRDB(parsed.DSN, log.With("postgres")), nil
 	})
 }
-
-var ebpg = EB.With("postgres")
 
 type PsqlRDB struct {
 	db   *sql.DB
 	core *RDBCore
 	dsn  string
+	log  *common.NamespacedLogger
 }
 
-func NewPsqlRDB(dsn string) *PsqlRDB {
-	rdb := &PsqlRDB{
+func NewPsqlRDB(dsn string, log *common.NamespacedLogger) *PsqlRDB {
+	return &PsqlRDB{
 		dsn: dsn,
+		log: log,
 	}
-	return rdb
 }
 
 // Execute executes a DML/DDL statement with optional parameters
@@ -60,7 +59,7 @@ func (r *PsqlRDB) Start() error {
 func (r *PsqlRDB) connect() error {
 	db, err := sql.Open("postgres", r.dsn)
 	if err != nil {
-		return ebpg.Error("Failed to open postgres connection: %v", err)
+		return r.log.NewError("Failed to open postgres connection: %v", err)
 	}
 
 	// Configure connection pool
@@ -72,7 +71,7 @@ func (r *PsqlRDB) connect() error {
 	// Test the connection
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return ebpg.Error("Failed to ping postgres: %v", err)
+		return r.log.NewError("Failed to ping postgres: %v", err)
 	}
 
 	r.db = db
@@ -80,15 +79,16 @@ func (r *PsqlRDB) connect() error {
 		db:        db,
 		rdbType:   r.Type(),
 		reconnect: r.reconnect,
+		log:       r.log,
 	}
 
-	common.Logger.Infof("PostgreSQL connection established successfully")
+	r.log.Infof("PostgreSQL connection established successfully")
 	return nil
 }
 
 // reconnect closes the old connection and establishes a new one
 func (r *PsqlRDB) reconnect() error {
-	common.Logger.Warnf("Attempting to reconnect to PostgreSQL...")
+	r.log.Warnf("Attempting to reconnect to PostgreSQL...")
 
 	// Close old connection if exists
 	if r.db != nil {

@@ -35,7 +35,6 @@ func ParseRDBURL(rawURL string) (*ParsedRDBURL, error) {
 	dbType := rawURL[:idx]
 	rawInner := rawURL[idx+3:] // 跳过 ://
 
-	fmt.Println("Paring RDB URL: " + rawURL)
 	switch dbType {
 	case "postgres", "postgresql":
 		return parsePostgresURL(dbType, rawInner)

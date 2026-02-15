@@ -17,20 +17,22 @@ type S3Gateway struct {
 	*common.BaseGateway[common.S3, common.S3Config]
 	grg           *gin.RouterGroup
 	TenantHandler gin.HandlerFunc
+	log           *common.NamespacedLogger
 }
 
-func NewGateway(grg *gin.RouterGroup, conf []common.S3Config) *S3Gateway {
+func NewGateway(grg *gin.RouterGroup, conf []common.S3Config, log *common.NamespacedLogger) *S3Gateway {
 	parser := func(c common.S3Config) (common.S3, error) {
 		parsed, err := ParseS3URL(c.URL)
 		if err != nil {
 			return nil, err
 		}
-		return CreateS3(parsed)
+		return CreateS3(parsed, log)
 	}
 
 	return &S3Gateway{
-		BaseGateway: common.NewBaseGateway(conf, parser),
+		BaseGateway: common.NewBaseGateway(conf, parser, log),
 		grg:         grg,
+		log:         log,
 	}
 }
 
@@ -44,7 +46,7 @@ func (gw *S3Gateway) Start() error {
 	if gw.TenantHandler != nil {
 		gw.grg.Use(gw.TenantHandler)
 	} else {
-		common.Logger.Warn("No tenant handler set for S3Gateway, multi-tenancy features will be disabled")
+		gw.log.Warn("No tenant handler set for S3Gateway, multi-tenancy features will be disabled")
 	}
 	gw.grg.Use(gw.middlewareCatchS3())
 	{

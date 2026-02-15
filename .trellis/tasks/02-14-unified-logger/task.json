@@ -1,0 +1,29 @@
+{
+  "id": "unified-logger",
+  "name": "unified-logger",
+  "title": "统一化日志管理 - logrus命名空间化logger",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-02-14",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "publish",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {"phase": 1, "action": "implement"},
+    {"phase": 2, "action": "check"},
+    {"phase": 3, "action": "finish"},
+    {"phase": 4, "action": "create-pr"}
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [],
+  "notes": ""
+}

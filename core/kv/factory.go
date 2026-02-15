@@ -7,7 +7,7 @@ import (
 )
 
 // KVFactory is a function that creates a KV instance from a parsed URL
-type KVFactory func(*ParsedKVURL) (common.KV, error)
+type KVFactory func(*ParsedKVURL, *common.NamespacedLogger) (common.KV, error)
 
 var kvFactories = make(map[string]KVFactory)
 
@@ -17,10 +17,10 @@ func RegisterKVFactory(kvType string, factory KVFactory) {
 }
 
 // CreateKV creates a KV instance based on the parsed URL
-func CreateKV(parsed *ParsedKVURL) (common.KV, error) {
+func CreateKV(parsed *ParsedKVURL, log *common.NamespacedLogger) (common.KV, error) {
 	factory, ok := kvFactories[parsed.Type]
 	if !ok {
 		return nil, fmt.Errorf("unsupported KV type: %s", parsed.Type)
 	}
-	return factory(parsed)
+	return factory(parsed, log)
 }

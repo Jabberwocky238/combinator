@@ -3,74 +3,110 @@ package common
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 )
 
-// Logger is the global logger instance
-var Logger *logrus.Logger
-var GlobalErrorBuilder = NewErrorBuilder()
-
-type ErrorBuilder struct {
-	Namespaces []string
+// NamespacedLogger provides namespaced logging and error building.
+// Use NewRootLogger() to create the root, and .With("sub") to derive child loggers.
+type NamespacedLogger struct {
+	logger *logrus.Logger
+	entry  *logrus.Entry
+	ns     string
 }
 
-func NewErrorBuilder() *ErrorBuilder {
-	return &ErrorBuilder{
-		Namespaces: []string{},
-	}
-}
-
-func (eb *ErrorBuilder) With(ns string) *ErrorBuilder {
-	ebnew := &ErrorBuilder{
-		Namespaces: make([]string, len(eb.Namespaces)),
-	}
-	copy(ebnew.Namespaces, eb.Namespaces)
-	ebnew.Namespaces = append(ebnew.Namespaces, ns)
-	return ebnew
-}
-
-func (eb *ErrorBuilder) String(msg string, args ...any) string {
-	if len(eb.Namespaces) == 0 {
-		return msg
-	}
-	ns := strings.Join(eb.Namespaces, ".")
-	return fmt.Sprintf("[%s] %s", ns, fmt.Sprintf(msg, args...))
-}
-
-func (eb *ErrorBuilder) Error(msg string, args ...any) error {
-	return fmt.Errorf("%s", eb.String(msg, args...))
-}
-
-func init() {
-	Logger = logrus.New()
-
-	// Set output to stdout
-	Logger.SetOutput(os.Stdout)
-
-	// Set log level
-	Logger.SetLevel(logrus.DebugLevel)
-
-	// Set formatter
-	Logger.SetFormatter(&logrus.TextFormatter{
+// NewRootLogger creates the root logger instance. Call once in main/init.
+func NewRootLogger() *NamespacedLogger {
+	l := logrus.New()
+	l.SetOutput(os.Stdout)
+	l.SetLevel(logrus.DebugLevel)
+	l.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05",
 	})
+	return &NamespacedLogger{
+		logger: l,
+		entry:  l.WithField("ns", "root"),
+		ns:     "root",
+	}
 }
 
-// SetLogLevel sets the global log level
-func SetLogLevel(level string) {
+// With derives a child logger with an appended namespace. e.g. logger.With("sqlite") → "rdb.sqlite"
+func (l *NamespacedLogger) With(sub string) *NamespacedLogger {
+	ns := l.ns + "." + sub
+	return &NamespacedLogger{
+		logger: l.logger,
+		entry:  l.logger.WithField("ns", ns),
+		ns:     ns,
+	}
+}
+
+// --- Logging methods ---
+
+func (l *NamespacedLogger) Debugf(format string, args ...any) {
+	l.entry.Debugf(format, args...)
+}
+
+func (l *NamespacedLogger) Infof(format string, args ...any) {
+	l.entry.Infof(format, args...)
+}
+
+func (l *NamespacedLogger) Warnf(format string, args ...any) {
+	l.entry.Warnf(format, args...)
+}
+
+func (l *NamespacedLogger) Errorf(format string, args ...any) {
+	l.entry.Errorf(format, args...)
+}
+
+func (l *NamespacedLogger) Fatalf(format string, args ...any) {
+	l.entry.Fatalf(format, args...)
+}
+
+func (l *NamespacedLogger) Debug(args ...any) {
+	l.entry.Debug(args...)
+}
+
+func (l *NamespacedLogger) Info(args ...any) {
+	l.entry.Info(args...)
+}
+
+func (l *NamespacedLogger) Warn(args ...any) {
+	l.entry.Warn(args...)
+}
+
+func (l *NamespacedLogger) Error(args ...any) {
+	l.entry.Error(args...)
+}
+
+func (l *NamespacedLogger) Fatal(args ...any) {
+	l.entry.Fatal(args...)
+}
+
+// --- Error building methods ---
+
+// NewError creates a namespaced error: [rdb.sqlite] msg
+func (l *NamespacedLogger) NewError(msg string, args ...any) error {
+	return fmt.Errorf("[%s] %s", l.ns, fmt.Sprintf(msg, args...))
+}
+
+// Str formats a namespaced string: [rdb.sqlite] msg
+func (l *NamespacedLogger) Str(msg string, args ...any) string {
+	return fmt.Sprintf("[%s] %s", l.ns, fmt.Sprintf(msg, args...))
+}
+
+// SetLogLevel sets the log level on this logger and all children
+func (l *NamespacedLogger) SetLogLevel(level string) {
 	switch level {
 	case "debug":
-		Logger.SetLevel(logrus.DebugLevel)
+		l.logger.SetLevel(logrus.DebugLevel)
 	case "info":
-		Logger.SetLevel(logrus.InfoLevel)
+		l.logger.SetLevel(logrus.InfoLevel)
 	case "warn":
-		Logger.SetLevel(logrus.WarnLevel)
+		l.logger.SetLevel(logrus.WarnLevel)
 	case "error":
-		Logger.SetLevel(logrus.ErrorLevel)
+		l.logger.SetLevel(logrus.ErrorLevel)
 	default:
-		Logger.SetLevel(logrus.InfoLevel)
+		l.logger.SetLevel(logrus.InfoLevel)
 	}
 }

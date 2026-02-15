@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	RegisterKVFactory("redis", func(parsed *ParsedKVURL) (common.KV, error) {
+	RegisterKVFactory("redis", func(parsed *ParsedKVURL, log *common.NamespacedLogger) (common.KV, error) {
 		return NewRedisKV(parsed.Host, parsed.Port, parsed.Password, parsed.DB), nil
 	})
 }

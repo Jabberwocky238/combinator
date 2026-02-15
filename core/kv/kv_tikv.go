@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	RegisterKVFactory("tikv", func(parsed *ParsedKVURL) (common.KV, error) {
+	RegisterKVFactory("tikv", func(parsed *ParsedKVURL, log *common.NamespacedLogger) (common.KV, error) {
 		return NewTiKV([]string{"tikv-pd-client.tikv.svc.cluster.local:2379"}, parsed.Tenant), nil
 	})
 }

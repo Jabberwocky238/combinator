@@ -8,26 +8,26 @@ import (
 	common "jabberwocky238/combinator/core/common"
 )
 
-var EB = common.GlobalErrorBuilder.With("rdb")
-
 type RDBGateway struct {
 	*common.BaseGateway[common.RDB, common.RDBConfig]
 	grg           *gin.RouterGroup
 	TenantHandler gin.HandlerFunc
+	log           *common.NamespacedLogger
 }
 
-func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig) *RDBGateway {
+func NewGateway(grg *gin.RouterGroup, conf []common.RDBConfig, log *common.NamespacedLogger) *RDBGateway {
 	parser := func(c common.RDBConfig) (common.RDB, error) {
 		parsed, err := ParseRDBURL(c.URL)
 		if err != nil {
 			return nil, err
 		}
-		return CreateRDB(parsed)
+		return CreateRDB(parsed, log)
 	}
 
 	gw := RDBGateway{
-		BaseGateway: common.NewBaseGateway(conf, parser),
+		BaseGateway: common.NewBaseGateway(conf, parser, log),
 		grg:         grg,
+		log:         log,
 	}
 	return &gw
 }
@@ -43,7 +43,7 @@ func (gw *RDBGateway) Start() error {
 	if gw.TenantHandler != nil {
 		gw.grg.Use(gw.TenantHandler)
 	} else {
-		common.Logger.Warn("No tenant handler set for RDBGateway, multi-tenancy features will be disabled")
+		gw.log.Warn("No tenant handler set for RDBGateway, multi-tenancy features will be disabled")
 	}
 	gw.grg.Use(gw.middlewareCatchRDB())
 	{
@@ -86,7 +86,7 @@ func (gw *RDBGateway) middlewareCatchRDB() gin.HandlerFunc {
 		if !ok {
 			tenantMode, _ := c.Get("tenant_mode")
 			tenantUID, _ := c.Get("tenant_uid")
-			common.Logger.Warnf("Invalid RDB ID requested: %s (tenant_mode=%v, tenant_uid=%v)",
+			gw.log.Warnf("Invalid RDB ID requested: %s (tenant_mode=%v, tenant_uid=%v)",
 				rdbID, tenantMode, tenantUID)
 			c.JSON(400, gin.H{"error": "invalid RDB ID"})
 			c.Abort()
@@ -141,7 +141,7 @@ func (gw *RDBGateway) handleExec(c *gin.Context) {
 
 	err := rdb.Exec(req.Stmt, req.Args...)
 	if err != nil {
-		common.Logger.Errorf("Execute failed: %v", err)
+		gw.log.Errorf("Execute failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -161,7 +161,7 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 		return
 	}
 
-	common.Logger.Debugf("Executing batch of %d statements", len(reqBody))
+	gw.log.Debugf("Executing batch of %d statements", len(reqBody))
 	var stmts []string
 	var args [][]any
 	for _, req := range reqBody {
@@ -170,7 +170,7 @@ func (gw *RDBGateway) handleBatch(c *gin.Context) {
 	}
 	err := rdb.Batch(stmts, args)
 	if err != nil {
-		common.Logger.Errorf("Batch execution failed: %v", err)
+		gw.log.Errorf("Batch execution failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

@@ -5,14 +5,12 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	common "jabberwocky238/combinator/core/common"
 )
 
 const (
-	maxRetries     = 3
-	retryDelay     = 100 * time.Millisecond
-	maxRetryDelay  = 2 * time.Second
+	maxRetries    = 3
+	retryDelay    = 100 * time.Millisecond
+	maxRetryDelay = 2 * time.Second
 )
 
 // isRetryableError checks if the error is a connection-related error that should trigger a retry
@@ -54,52 +52,4 @@ func isRetryableError(err error) bool {
 	}
 
 	return false
-}
-
-// retryWithReconnect executes a function with retry logic and reconnection
-func retryWithReconnect(operation func() error, reconnect func() error, opName string) error {
-	var lastErr error
-	delay := retryDelay
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			common.Logger.Warnf("[%s] Retry attempt %d/%d after %v", opName, attempt, maxRetries, delay)
-			time.Sleep(delay)
-
-			// Exponential backoff
-			delay *= 2
-			if delay > maxRetryDelay {
-				delay = maxRetryDelay
-			}
-
-			// Try to reconnect before retry
-			if err := reconnect(); err != nil {
-				common.Logger.Errorf("[%s] Reconnection failed: %v", opName, err)
-				lastErr = err
-				continue
-			}
-			common.Logger.Infof("[%s] Reconnection successful", opName)
-		}
-
-		// Execute the operation
-		err := operation()
-		if err == nil {
-			if attempt > 0 {
-				common.Logger.Infof("[%s] Operation succeeded after %d retries", opName, attempt)
-			}
-			return nil
-		}
-
-		lastErr = err
-
-		// Check if error is retryable
-		if !isRetryableError(err) {
-			common.Logger.Debugf("[%s] Non-retryable error: %v", opName, err)
-			return err
-		}
-
-		common.Logger.Warnf("[%s] Retryable error detected: %v", opName, err)
-	}
-
-	return ebcore.Error("[%s] Failed after %d retries: %v", opName, maxRetries, lastErr)
 }

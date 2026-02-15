@@ -7,7 +7,7 @@ import (
 )
 
 // RDBFactory is a function that creates a RDB instance from a parsed URL
-type RDBFactory func(*ParsedRDBURL) (common.RDB, error)
+type RDBFactory func(*ParsedRDBURL, *common.NamespacedLogger) (common.RDB, error)
 
 var rdbFactories = make(map[string]RDBFactory)
 
@@ -17,10 +17,10 @@ func RegisterRDBFactory(rdbType string, factory RDBFactory) {
 }
 
 // CreateRDB creates a RDB instance based on the parsed URL
-func CreateRDB(parsed *ParsedRDBURL) (common.RDB, error) {
+func CreateRDB(parsed *ParsedRDBURL, log *common.NamespacedLogger) (common.RDB, error) {
 	factory, ok := rdbFactories[parsed.Type]
 	if !ok {
 		return nil, fmt.Errorf("unsupported RDB type: %s", parsed.Type)
 	}
-	return factory(parsed)
+	return factory(parsed, log)
 }

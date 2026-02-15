@@ -15,20 +15,22 @@ type KVGateway struct {
 	*common.BaseGateway[common.KV, common.KVConfig]
 	grg           *gin.RouterGroup
 	TenantHandler gin.HandlerFunc
+	log           *common.NamespacedLogger
 }
 
-func NewGateway(grg *gin.RouterGroup, conf []common.KVConfig) *KVGateway {
+func NewGateway(grg *gin.RouterGroup, conf []common.KVConfig, log *common.NamespacedLogger) *KVGateway {
 	parser := func(c common.KVConfig) (common.KV, error) {
 		parsed, err := ParseKVURL(c.URL)
 		if err != nil {
 			return nil, err
 		}
-		return CreateKV(parsed)
+		return CreateKV(parsed, log)
 	}
 
 	return &KVGateway{
-		BaseGateway: common.NewBaseGateway(conf, parser),
+		BaseGateway: common.NewBaseGateway(conf, parser, log),
 		grg:         grg,
+		log:         log,
 	}
 }
 
@@ -43,7 +45,7 @@ func (gw *KVGateway) Start() error {
 	if gw.TenantHandler != nil {
 		gw.grg.Use(gw.TenantHandler)
 	} else {
-		common.Logger.Warn("No tenant handler set for KVGateway, multi-tenancy features will be disabled")
+		gw.log.Warn("No tenant handler set for KVGateway, multi-tenancy features will be disabled")
 	}
 	gw.grg.Use(gw.middlewareCatchKV())
 	{
@@ -151,7 +153,7 @@ func (gw *KVGateway) handleSet(c *gin.Context) {
 
 	// 使用流式接口
 	if err := kv.Set(key, c.Request.Body, opts); err != nil {
-		common.Logger.Errorf("Set failed: %v", err)
+		gw.log.Errorf("Set failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -180,7 +182,7 @@ func (gw *KVGateway) handleDelete(c *gin.Context) {
 	}
 
 	if err := kv.Del(key, opts); err != nil {
-		common.Logger.Errorf("Delete failed: %v", err)
+		gw.log.Errorf("Delete failed: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

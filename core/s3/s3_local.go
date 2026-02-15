@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	RegisterS3Factory("local", func(parsed *ParsedS3URL) (common.S3, error) {
+	RegisterS3Factory("local", func(parsed *ParsedS3URL, log *common.NamespacedLogger) (common.S3, error) {
 		return NewLocalS3(parsed.Path), nil
 	})
 }
