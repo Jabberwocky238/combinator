@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(go get:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(./.trellis/scripts/get-context.sh:*)",
+      "Bash(./.trellis/scripts/init-developer.sh:*)"
     ]
   }
 }

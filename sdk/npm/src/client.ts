@@ -23,10 +23,8 @@ export class Combinator {
   private secretKey?: string
 
   constructor(config: CombinatorConfig = {}) {
-    this.baseURL = (config.baseURL ?? process.env.COMBINATOR_BASE_URL ?? 'http://localhost:8899').replace(/\/$/, '')
-    if (this.baseURL.includes('localhost') && this.baseURL.startsWith('http://') && !this.baseURL.startsWith('https://')) {
-      this.isLocal = true
-    }
+    this.baseURL = config.baseURL ?? process.env.COMBINATOR_API_ENDPOINT ?? 'http://localhost:8899'
+    this.isLocal = new URL(this.baseURL).hostname === 'localhost'
     this.uid = config.uid ?? process.env.RAYSAIL_UID
     this.secretKey = config.secretKey ?? process.env.RAYSAIL_SECRET_KEY
   }
